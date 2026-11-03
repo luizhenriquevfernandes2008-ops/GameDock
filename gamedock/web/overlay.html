@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>GameDock Trophy</title>
+  <style>
+    :root {
+      --tier: #cd8a4a;
+      --font: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; overflow: hidden; background: #101015; color: #f4f4f6; font-family: var(--font);
+                 user-select: none; -webkit-font-smoothing: antialiased; }
+    .card {
+      position: relative; height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 20px 0 16px;
+      background:
+        radial-gradient(120% 140% at 0% 50%, color-mix(in srgb, var(--tier) 26%, transparent), transparent 60%),
+        linear-gradient(180deg, #17171e, #0e0e13);
+      opacity: 0; transform: translateX(24px);
+      transition: opacity .35s ease, transform .45s cubic-bezier(.2, .8, .2, 1);
+    }
+    .card.show { opacity: 1; transform: none; }
+    .card.show::after {   /* brilho que atravessa o cartão */
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / .16) 50%, transparent 65%);
+      animation: shine 1.3s .25s ease-out both;
+    }
+    @keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+    .icon { position: relative; width: 72px; height: 72px; flex: none; border-radius: 14px; overflow: hidden;
+            box-shadow: 0 0 0 2px var(--tier), 0 0 26px -2px var(--tier); background: #22222b; }
+    .icon img { width: 100%; height: 100%; object-fit: cover; }
+    .card.show .icon { animation: pop .55s .1s cubic-bezier(.3, 1.6, .5, 1) both; }
+    @keyframes pop { from { transform: scale(.6); } }
+
+    .text { flex: 1; min-width: 0; }
+    .label { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: .2em;
+             text-transform: uppercase; color: var(--tier); margin-bottom: 5px; }
+    .label svg { width: 13px; height: 13px; fill: currentColor; }
+    .name { font-size: 19px; font-weight: 800; letter-spacing: -.01em; line-height: 1.15;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta { margin-top: 4px; font-size: 12.5px; color: rgb(244 244 246 / .6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .timer { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--tier); transform-origin: left;
+             box-shadow: 0 0 10px var(--tier); }
+    .card.show .timer { animation: drain 6.3s linear both; }
+    @keyframes drain { to { transform: scaleX(0); } }
+
+    .card.level .icon { display: grid; place-items: center;
+                        background: radial-gradient(circle at 35% 30%, #c9b6ff, #7c5cff 55%, #3b2a8a); }
+    .lvl { font-size: 30px; font-weight: 900; color: #fff; text-shadow: 0 2px 10px rgb(0 0 0 / .4); }
+
+    /* platina: cartão especial */
+    .card.platinum .icon { background: radial-gradient(circle at 35% 30%, #ffffff, #bfe6ff 30%, #7aa7d6 70%, #4b6a9a); }
+    .card.platinum .name { background: linear-gradient(90deg, #fff, #bfe6ff, #fff); -webkit-background-clip: text; color: transparent; }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="icon" id="icon"></div>
+    <div class="text">
+      <div class="label">
+        <svg viewBox="0 0 24 24" id="labelIcon"></svg>
+        <span id="label"></span>
+      </div>
+      <div class="name" id="name"></div>
+      <div class="meta" id="meta"></div>
+    </div>
+    <i class="timer"></i>
+  </div>
+  <script src="sound.js"></script>
+  <script>
+    const TIERS = {
+      bronze: { color: "#d08a4c", label: "Bronze" },
+      silver: { color: "#c9d2de", label: "Prata" },
+      gold: { color: "#f5c542", label: "Ouro" },
+      platinum: { color: "#a9dcff", label: "Platina" },
+    };
+
+    const TROPHY_PATH = '<path d="M7 3h10v2h3v3a5 5 0 0 1-4.6 5A5 5 0 0 1 13 15.9V18h3v3H8v-3h3v-2.1A5 5 0 0 1 8.6 13 5 5 0 0 1 4 8V5h3zm-1 4v1a3 3 0 0 0 1.4 2.5A8 8 0 0 1 7 8V7zm11 0v1c0 .9-.1 1.7-.4 2.5A3 3 0 0 0 18 8V7z"/>';
+    // o mesmo cartão serve para troféu, captura de tela e subida de nível
+    const KINDS = {
+      capture: { color: "#f4f4f6", label: "Captura de tela", sound: "shutter" },
+      level: { color: "#9d7bff", label: "Subiu de nível", sound: "levelup" },
+      challenge: { color: "#2fd18b", label: "Desafio do GameDock", sound: "levelup" },
+      goal: { color: "#2fd18b", label: "Meta da semana", sound: "levelup" },
+      break: { color: "#3dd6ff", label: "Hora de uma pausa?", sound: "open" },
+      state: { color: "#f4f4f6", label: "Save state", sound: "shutter" },
+    };
+
+    function showTrophy(t) {
+      const kind = KINDS[t.kind];
+      const tier = kind || TIERS[t.tier] || TIERS.bronze;
+      const card = document.getElementById("card");
+      card.style.setProperty("--tier", tier.color);
+      card.classList.toggle("platinum", t.tier === "platinum");
+      card.classList.toggle("level", t.kind === "level");
+      document.getElementById("label").textContent = kind ? (t.label || kind.label)
+        : t.tier === "platinum" ? "Platina conquistada" : `Troféu de ${tier.label.toLowerCase()}`;
+      document.getElementById("name").textContent = t.name;
+      const rarity = t.percent != null ? `${t.percent.toFixed(1).replace(".", ",")}% dos jogadores` : "";
+      document.getElementById("meta").textContent = [t.game, rarity].filter(Boolean).join(" · ");
+      document.getElementById("labelIcon").innerHTML = t.kind === "capture"
+        ? '<path d="M4 7h3l2-2.5h6L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3.2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>'
+        : TROPHY_PATH;
+      document.getElementById("icon").innerHTML = t.kind === "level" ? `<span class="lvl">${t.level}</span>`
+        : t.kind === "break" ? '<span class="lvl">☕</span>' : t.kind === "state" ? '<span class="lvl">💾</span>'
+        : (t.kind === "challenge" || t.kind === "goal") && !t.icon ? '<span class="lvl">★</span>'
+        : t.icon ? `<img src="${t.icon}" alt="">` : "";
+      card.classList.remove("show");
+      void card.offsetWidth;
+      card.classList.add("show");
+      Sfx.configure({ enabled: t.sound !== false, volume: t.volume ?? 0.6 });
+      Sfx.play(kind ? kind.sound : t.tier === "platinum" ? "platinum" : "trophy_" + t.tier);
+    }
+
+    function hideTrophy() {
+      document.getElementById("card").classList.remove("show");
+    }
+  </script>
+</body>
+</html>

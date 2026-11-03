@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>GameDock</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="features.css">
+</head>
+<body>
+  <!-- fundo: duas camadas de arte para fazer crossfade entre jogos -->
+  <div id="bg" aria-hidden="true">
+    <img class="hero-layer" id="heroA" alt="">
+    <img class="hero-layer" id="heroB" alt="">
+    <div class="hero-gen" id="heroGen"></div>
+    <div class="shade"></div>
+    <div class="grain"></div>
+  </div>
+
+  <header class="titlebar">
+    <div class="brand pywebview-drag-region">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <defs>
+          <linearGradient id="dockGrad" x1="0" x2="1">
+            <stop offset="0" stop-color="#ff3d81"/><stop offset=".5" stop-color="#ffb23d"/><stop offset="1" stop-color="#3dd6ff"/>
+          </linearGradient>
+        </defs>
+        <path d="M12 6.5v13l10.5-6.5z" fill="currentColor"/>
+        <rect x="5" y="23.5" width="22" height="3.5" rx="1.75" fill="url(#dockGrad)"/>
+      </svg>
+      <span class="wordmark">GAME<b>DOCK</b></span>
+    </div>
+    <div class="drag-spacer pywebview-drag-region"></div>
+    <span class="pad-battery" id="padBattery" hidden title="Bateria do controle"><i></i><b></b></span>
+    <span class="clock" id="clock"></span>
+    <button class="tb-btn" id="randomBtn" title="Sortear um jogo (S)">
+      <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><circle cx="15" cy="15" r="1.5" fill="currentColor"/><circle cx="15" cy="9" r="1.5" fill="currentColor"/><circle cx="9" cy="15" r="1.5" fill="currentColor"/></svg>
+    </button>
+    <button class="tb-btn" id="freeBtn" title="Jogos grátis da semana">
+      <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7h18v3H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1.2C7 7 12 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 12 7 12 7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <i class="dot" id="freeDot" hidden></i>
+    </button>
+    <button class="tb-btn" id="searchBtn" title="Buscar (Ctrl+F)">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button class="tb-btn" id="galleryBtn" title="Capturas (G)">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 5l1.5-2h5L16 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="profile-btn" id="profileBtn" title="Perfil (P)">
+      <span class="avatar small" id="tbAvatar"></span>
+      <span class="tb-level" id="tbLevel"></span>
+    </button>
+    <button class="tb-btn" id="settingsBtn" title="Configurações">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+    </button>
+    <button class="tb-btn" id="scanBtn" title="Procurar jogos (R)">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="win-controls">
+      <button id="winMin" title="Minimizar"><svg viewBox="0 0 12 12"><path d="M2 6h8" stroke="currentColor"/></svg></button>
+      <button id="winMax" title="Maximizar"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor"/></svg></button>
+      <button id="winClose" class="close" title="Fechar"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor"/></svg></button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="hero-info" id="heroInfo">
+      <div class="title-wrap">
+        <img id="gameLogo" class="game-logo" alt="">
+        <h1 id="gameTitle" class="game-title"></h1>
+      </div>
+      <div class="meta">
+        <span class="chip live" id="gameLive">Jogando agora</span>
+        <span class="chip" id="gameSource"></span>
+        <button class="chip trophy-chip" id="gameTrophies" title="Troféus (T)">
+          <svg viewBox="0 0 24 24"><path d="M7 3h10v2h3v3a5 5 0 0 1-4.6 5A5 5 0 0 1 13 15.9V18h3v3H8v-3h3v-2.1A5 5 0 0 1 8.6 13 5 5 0 0 1 4 8V5h3zm-1 4v1a3 3 0 0 0 1.4 2.5A8 8 0 0 1 7 8V7zm11 0v1c0 .9-.1 1.7-.4 2.5A3 3 0 0 0 18 8V7z"/></svg>
+          <span id="gameTrophiesText"></span>
+          <i class="mini-bar"><b id="gameTrophiesBar"></b></i>
+        </button>
+        <span class="stats" id="gameStats"></span>
+      </div>
+      <div class="actions">
+        <button class="play-btn" id="playBtn">
+          <svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></svg>
+          <span>Jogar</span>
+        </button>
+        <button class="round-btn" id="infoBtn" title="Detalhes do jogo (↓)">
+          <svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="round-btn" id="favBtn" title="Favoritar (F)">
+          <svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <section class="shelf-wrap">
+    <div class="tabs-row">
+      <nav class="tabs" id="tabs"></nav>
+      <label class="search" id="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="searchInput" placeholder="Buscar jogo..." spellcheck="false" autocomplete="off">
+        <kbd>Esc</kbd>
+      </label>
+    </div>
+    <div class="shelf" id="shelf"></div>
+    <p class="shelf-empty" id="shelfEmpty">Nenhum jogo aqui.</p>
+  </section>
+
+  <footer class="hints" id="hints"></footer>
+
+  <div class="empty" id="empty">
+    <h2>Nenhum jogo por aqui ainda</h2>
+    <p>O GameDock procura jogos da Steam, Epic, GOG, Ubisoft, Riot e outros.</p>
+    <button class="play-btn" id="emptyScan"><span>Procurar jogos</span></button>
+  </div>
+
+  <div class="launch-overlay" id="launchOverlay">
+    <div class="launch-cover" id="launchCover"></div>
+    <div class="launch-text">
+      <small>Iniciando</small>
+      <strong id="launchName"></strong>
+      <div class="launch-bar"><i></i></div>
+    </div>
+  </div>
+
+  <div class="settings" id="settings">
+    <form class="settings-panel" id="settingsForm">
+      <header>
+        <h2>Configurações</h2>
+        <button type="button" class="tb-btn" id="settingsClose" title="Fechar (Esc)">
+          <svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+      </header>
+      <section>
+        <h3>Capas em alta resolução</h3>
+        <p>O <b>SteamGridDB</b> tem capas, fundos e logos feitos pela comunidade para quase todo jogo,
+           inclusive os que não são da Steam. Crie uma conta grátis e cole sua chave de API aqui.</p>
+        <label for="sgdbKey">Chave de API do SteamGridDB</label>
+        <div class="field-row">
+          <input id="sgdbKey" type="password" spellcheck="false" autocomplete="off" placeholder="cole a chave aqui">
+          <button type="button" class="ghost-btn" id="sgdbShow">Mostrar</button>
+        </div>
+        <div class="settings-actions">
+          <button type="button" class="link-btn" id="sgdbGetKey">Pegar minha chave grátis ↗</button>
+          <button type="submit" class="play-btn small" id="sgdbSave"><span>Salvar</span></button>
+        </div>
+        <p class="settings-status" id="sgdbStatus"></p>
+      </section>
+      <section class="settings-sound">
+        <h3>Troféus</h3>
+        <label class="switch-row">
+          <span>Aviso na tela do jogo <small>aparece por cima do jogo, sem tirar o foco</small></span>
+          <input type="checkbox" id="trophyPopup"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Capturar a tela ao ganhar troféu <small>a imagem fica guardada no troféu</small></span>
+          <input type="checkbox" id="trophyShot"><i class="switch"></i>
+        </label>
+        <div class="settings-actions" style="margin-top:4px">
+          <span class="settings-hint">Mostra um troféu de exemplo no canto da tela.</span>
+          <button type="button" class="ghost-btn tall" id="trophyTest">Testar aviso</button>
+        </div>
+      </section>
+      <section class="settings-sound">
+        <h3>Aplicativo</h3>
+        <label class="switch-row">
+          <span>Fechar vai para a bandeja <small>o GameDock continua contando tempo e vigiando troféus</small></span>
+          <input type="checkbox" id="closeToTray"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Iniciar com o Windows <small>abre direto na bandeja, sem janela</small></span>
+          <input type="checkbox" id="autostart"><i class="switch"></i>
+        </label>
+      </section>
+      <section class="settings-sound">
+        <h3>Capturas</h3>
+        <label class="volume-row">
+          <span style="width:auto;flex:1">Tecla para capturar a tela <small style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:2px">funciona dentro do jogo</small></span>
+          <select id="captureKey" class="select"></select>
+        </label>
+        <p class="settings-status" id="captureStatus"></p>
+      </section>
+      <section class="settings-sound">
+        <h3>Emuladores</h3>
+        <p>O GameDock baixa e configura o emulador oficial e abre seus jogos direto, como se fossem de PC.
+           Use cópias dos seus próprios discos.</p>
+        <label class="switch-row">
+          <span>Mostrar FPS dentro do jogo <small>contador de quadros e velocidade do próprio emulador</small></span>
+          <input type="checkbox" data-pref="emu_perf_overlay"><i class="switch"></i>
+        </label>
+        <div id="emuList"></div>
+      </section>
+      <section class="settings-sound">
+        <h3>RetroAchievements</h3>
+        <p>Troféus de verdade para jogos de PS1, PS2 e NES (grátis, em <b>retroachievements.org</b>). O emulador mostra o
+           aviso na hora; o GameDock guarda os troféus no seu perfil. A senha não é guardada, só a sessão.</p>
+        <div id="raBox"></div>
+      </section>
+      <section class="settings-sound">
+        <h3>Modo Jogo</h3>
+        <label class="switch-row">
+          <span>Ligar o Modo Jogo <small>enquanto você joga: energia em desempenho máximo e o resto do PC quieto</small></span>
+          <input type="checkbox" data-pref="game_mode"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Pausar notificações do Windows <small>voltam sozinhas quando o jogo fecha</small></span>
+          <input type="checkbox" data-pref="game_mode_quiet"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Reabrir os apps fechados <small>depois que o jogo fecha</small></span>
+          <input type="checkbox" data-pref="game_mode_reopen"><i class="switch"></i>
+        </label>
+        <p style="margin:6px 0 8px">Fechar estes apps ao abrir um jogo <small class="pe-count">(pede para fechar, como o X da janela)</small></p>
+        <div class="app-chips" id="gmApps"></div>
+        <label class="volume-row" style="margin-top:16px !important"><span style="width:auto;flex:1">Lembrete de pausa <small style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:2px">um aviso discreto por cima do jogo</small></span>
+          <select class="select" data-pref="break_reminder" data-num><option value="0">Desligado</option><option value="60">A cada 1 h</option><option value="90">A cada 1 h 30</option><option value="120">A cada 2 h</option><option value="180">A cada 3 h</option></select></label>
+      </section>
+      <section class="settings-sound">
+        <h3>Saves</h3>
+        <p>Depois de cada sessão, o GameDock guarda uma cópia do save do jogo em Documentos\GameDock\Saves (quando sabe onde ele fica).</p>
+        <label class="switch-row">
+          <span>Backup automático ao fechar o jogo <small>um backup igual ao anterior não é repetido</small></span>
+          <input type="checkbox" data-pref="save_auto"><i class="switch"></i>
+        </label>
+        <label class="volume-row"><span style="width:auto;flex:1">Guardar os últimos</span>
+          <select class="select" data-pref="save_keep" data-num><option value="5">5 backups</option><option value="10">10 backups</option><option value="20">20 backups</option><option value="50">50 backups</option></select></label>
+        <div class="settings-actions" style="margin-top:0"><span></span><button type="button" class="link-btn" id="savesOpen">Abrir pasta de saves ↗</button></div>
+      </section>
+      <section class="settings-sound">
+        <h3>Discord</h3>
+        <label class="switch-row">
+          <span>Mostrar o que estou jogando <small>"Jogando GameDock · Asura's Wrath" no seu perfil do Discord</small></span>
+          <input type="checkbox" data-pref="discord_presence"><i class="switch"></i>
+        </label>
+        <label for="discordId">Application ID <small class="pe-count">(crie um app chamado "GameDock" em discord.com/developers → New Application e copie o "Application ID")</small></label>
+        <div class="field-row"><input id="discordId" data-pref="discord_client_id" spellcheck="false" autocomplete="off" placeholder="ex: 123456789012345678"></div>
+        <label for="discordHook" style="margin-top:12px">Webhook para mandar capturas e clipes <small class="pe-count">(canal → Editar canal → Integrações → Webhooks → Copiar URL)</small></label>
+        <div class="field-row"><input id="discordHook" type="password" data-pref="discord_webhook" spellcheck="false" autocomplete="off" placeholder="https://discord.com/api/webhooks/..."></div>
+        <div class="settings-actions"><button type="button" class="link-btn" id="discordDev">Abrir o portal de desenvolvedor ↗</button><span></span></div>
+      </section>
+      <section class="settings-sound">
+        <h3>Tempo para zerar</h3>
+        <p>Vem do <b>IGDB</b> (a base de jogos da Twitch), de graça: crie um app em dev.twitch.tv/console (categoria
+           "Application Integration", URL "http://localhost") e cole o Client ID e o Client Secret.</p>
+        <div class="options-grid">
+          <label>Client ID<input id="igdbId" spellcheck="false" autocomplete="off"></label>
+          <label>Client Secret<input id="igdbSecret" type="password" spellcheck="false" autocomplete="off"></label>
+        </div>
+        <div class="settings-actions">
+          <button type="button" class="link-btn" id="igdbPage">Criar o app na Twitch ↗</button>
+          <button type="button" class="ghost-btn tall" id="igdbSave">Salvar</button>
+        </div>
+        <p class="settings-status" id="igdbStatus"></p>
+      </section>
+      <section class="settings-sound">
+        <h3>Aparência</h3>
+        <label class="volume-row"><span style="width:auto;flex:1">Tema</span>
+          <select class="select" data-pref="theme"><option value="dark">Escuro</option><option value="oled">Preto (OLED)</option><option value="midnight">Meia-noite</option><option value="aurora">Aurora</option></select></label>
+        <label class="switch-row">
+          <span>Fundo animado <small>a arte do jogo se move devagar, como no PS5</small></span>
+          <input type="checkbox" data-pref="animated_bg"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Música na página do jogo <small>a música do menu dos jogos de PS3 (vem no disco), baixinho</small></span>
+          <input type="checkbox" data-pref="theme_music"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Som do trailer de fundo <small>o trailer da página do jogo toca com som baixo</small></span>
+          <input type="checkbox" data-pref="trailer_music"><i class="switch"></i>
+        </label>
+        <label class="volume-row"><span>Texto</span>
+          <input type="range" data-pref="text_scale" data-num min="90" max="130" step="5"><output id="textScaleOut"></output></label>
+        <label class="switch-row">
+          <span>Cores para daltônicos <small>bronze, prata, ouro e platina bem diferentes, com a letra do nível</small></span>
+          <input type="checkbox" data-pref="colorblind"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Reduzir movimento <small>sem animações de fundo e transições longas</small></span>
+          <input type="checkbox" data-pref="reduce_motion"><i class="switch"></i>
+        </label>
+      </section>
+      <section class="settings-sound">
+        <h3>Modo Console</h3>
+        <label class="switch-row">
+          <span>O PC liga direto no GameDock <small>inicia com o Windows em tela cheia, como um PS5 (liga também "Iniciar com o Windows")</small></span>
+          <input type="checkbox" data-pref="console_mode"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Sempre abrir em tela cheia <small>F11 alterna</small></span>
+          <input type="checkbox" data-pref="start_fullscreen"><i class="switch"></i>
+        </label>
+      </section>
+      <section class="settings-sound">
+        <h3>Controle</h3>
+        <div class="settings-actions" style="margin-top:0"><span id="padInfo" class="settings-hint">Procurando controle…</span><button type="button" class="ghost-btn" id="padRefresh">Atualizar</button></div>
+        <label class="switch-row" style="margin-top:14px !important">
+          <span>Luz do DualSense na cor do perfil <small id="lightbarHint">DualSense e DualShock 4, por USB ou Bluetooth</small></span>
+          <input type="checkbox" data-pref="lightbar_sync"><i class="switch"></i>
+        </label>
+      </section>
+      <section class="settings-sound">
+        <h3>Jogos grátis</h3>
+        <label class="switch-row">
+          <span>Avisar quando tiver jogo grátis na Epic <small>uma vez por jogo</small></span>
+          <input type="checkbox" data-pref="free_games_notify"><i class="switch"></i>
+        </label>
+      </section>
+      <section class="settings-sound">
+        <h3>Clipes de vídeo</h3>
+        <p>Enquanto um jogo está aberto, o GameDock grava continuamente na placa de vídeo e, quando você aperta a tecla,
+           salva os últimos segundos (com o som do PC) em Vídeos\GameDock.</p>
+        <div class="settings-actions" id="clipInstallRow" style="margin-top:0">
+          <span class="settings-hint" id="clipInstallText">Precisa baixar o componente de gravação (ffmpeg, ~110 MB, uma vez).</span>
+          <button type="button" class="ghost-btn tall" id="clipInstall">Baixar</button>
+        </div>
+        <div id="clipOptions">
+          <label class="switch-row">
+            <span>Gravar clipes <small id="clipEncoder">usa o codificador da placa de vídeo</small></span>
+            <input type="checkbox" id="clipEnabled"><i class="switch"></i>
+          </label>
+          <label class="switch-row">
+            <span>Incluir o som do PC</span>
+            <input type="checkbox" id="clipAudio"><i class="switch"></i>
+          </label>
+          <label class="volume-row"><span style="width:auto;flex:1">Duração do clipe</span>
+            <select id="clipSeconds" class="select"><option value="15">15 s</option><option value="30">30 s</option><option value="60">1 min</option><option value="120">2 min</option></select></label>
+          <label class="volume-row"><span style="width:auto;flex:1">Quadros por segundo</span>
+            <select id="clipFps" class="select"><option value="30">30</option><option value="60">60</option></select></label>
+          <label class="volume-row"><span style="width:auto;flex:1">Tecla para salvar o clipe</span>
+            <select id="clipKey" class="select"></select></label>
+          <div class="settings-actions" style="margin-top:4px">
+            <span class="settings-status" id="clipStatus" style="margin:0 !important"></span>
+            <button type="button" class="link-btn" id="clipFolder">Abrir pasta de clipes ↗</button>
+          </div>
+        </div>
+      </section>
+      <section class="settings-sound">
+        <h3>Dados</h3>
+        <p>Sem conta online, seu progresso (troféus, tempo, capturas) fica só neste PC. Faça backup de vez em quando.</p>
+        <div class="settings-actions" style="margin-top:0">
+          <button type="button" class="link-btn" id="backupOpen">Abrir pasta de backups ↗</button>
+          <button type="button" class="ghost-btn tall" id="backupNow">Fazer backup agora</button>
+        </div>
+        <p class="settings-status" id="backupStatus"></p>
+        <div id="hiddenGames"></div>
+      </section>
+      <section class="settings-sound">
+        <h3>Sons</h3>
+        <label class="switch-row">
+          <span>Sons da interface <small>navegar, jogar, favoritar</small></span>
+          <input type="checkbox" id="soundEnabled"><i class="switch"></i>
+        </label>
+        <label class="switch-row">
+          <span>Som de abertura <small>a assinatura do GameDock ao abrir</small></span>
+          <input type="checkbox" id="soundBoot"><i class="switch"></i>
+        </label>
+        <label class="volume-row">
+          <span>Volume</span>
+          <input type="range" id="soundVolume" min="0" max="100" step="5">
+          <output id="soundVolumeOut"></output>
+        </label>
+      </section>
+      <section class="settings-sound">
+        <h3>Sobre o GameDock</h3>
+        <div class="about" id="about"></div>
+        <label class="switch-row" style="margin-top:14px !important">
+          <span>Atualizar sozinho <small>procura versão nova uma vez por dia e avisa</small></span>
+          <input type="checkbox" data-pref="update_auto"><i class="switch"></i>
+        </label>
+        <div class="settings-actions" style="margin-top:4px">
+          <button type="button" class="link-btn" id="logsOpen">Abrir registro de erros ↗</button>
+          <button type="button" class="ghost-btn tall" id="updateCheck">Procurar atualização</button>
+        </div>
+        <p class="settings-status" id="updateStatus"></p>
+        <button type="button" class="link-btn" id="obAgain">Ver a apresentação de novo</button>
+      </section>
+    </form>
+  </div>
+
+  <div class="trophies" id="trophies">
+    <div class="trophies-panel">
+      <header>
+        <div class="tp-ring" id="tpRing"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5"/><circle class="fill" id="tpRingFill" cx="18" cy="18" r="15.5"/></svg><b id="tpPercent"></b></div>
+        <div class="tp-title">
+          <small>Troféus</small>
+          <h2 id="tpGame"></h2>
+          <div class="tp-tiers" id="tpTiers"></div>
+        </div>
+        <button type="button" class="tb-btn" id="trophiesClose" title="Fechar (Esc)">
+          <svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+      </header>
+      <div class="tp-list" id="tpList"></div>
+    </div>
+  </div>
+
+  <!-- página do jogo -->
+  <section class="page game-page" id="gamePage">
+    <div class="gp-hero" id="gpHero">
+      <img class="gp-hero-img" id="gpHeroImg" alt="">
+      <video class="gp-hero-video" id="gpVideo" muted playsinline loop></video>
+      <div class="gp-hero-shade"></div>
+      <div class="page-inner gp-hero-inner">
+        <div class="gp-cover" id="gpCover"></div>
+        <div class="gp-title">
+          <img class="gp-logo" id="gpLogo" alt="">
+          <h2 id="gpName"></h2>
+          <div class="gp-tags" id="gpTags"></div>
+          <div class="gp-actions">
+            <button class="play-btn" id="gpPlay"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></svg><span>Jogar</span></button>
+            <button class="round-btn" id="gpFav" title="Favoritar"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+            <button class="round-btn" id="gpSound" title="Som do trailer" hidden><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path id="gpSoundWave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          </div>
+          <div class="status-row" id="gpStatus"></div>
+        </div>
+        <div class="gp-scores" id="gpScores"></div>
+        <button class="tb-btn page-close" data-close title="Voltar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button>
+      </div>
+    </div>
+
+    <div class="page-inner gp-body">
+      <section class="gp-media" id="gpMedia"></section>
+
+      <div class="gp-two">
+        <section class="block">
+          <h3>Sobre o jogo</h3>
+          <p class="gp-short" id="gpShort"></p>
+          <div class="gp-about" id="gpAbout"></div>
+          <button class="link-btn" id="gpMore">Ler mais</button>
+        </section>
+        <section class="block">
+          <h3>Informações</h3>
+          <dl class="facts" id="gpFacts"></dl>
+          <div class="my-rating">
+            <span>Sua nota</span>
+            <div class="stars" id="gpStars"></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="block" id="gpNewsBlock" hidden>
+        <h3>Novidades</h3>
+        <div class="news" id="gpNews"></div>
+      </section>
+
+      <section class="block">
+        <h3>Seu progresso</h3>
+        <div class="stat-tiles flat" id="gpTiles"></div>
+        <h4 class="chart-title">Horas por dia <span>· últimos 30 dias</span></h4>
+        <div class="chart" id="gpChart"></div>
+      </section>
+
+      <div class="gp-two">
+        <section class="block">
+          <h3>Tempo para zerar</h3>
+          <div class="beat" id="gpBeat"></div>
+        </section>
+        <section class="block">
+          <h3>Anotações <small class="saved-note" id="gpNotesSaved"></small></h3>
+          <textarea class="notes" id="gpNotes" rows="4" maxlength="5000" placeholder="ex: parei no chefe do capítulo 3, falta pegar a espada"></textarea>
+        </section>
+      </div>
+
+      <section class="block" id="gpSavesBlock">
+        <h3>Saves <button class="link-btn" id="gpSavesFolder">pasta de backups ↗</button></h3>
+        <div id="gpSaves"><p class="shots-empty">Procurando o save…</p></div>
+      </section>
+
+      <section class="block" id="gpEnhBlock" hidden>
+        <h3>Melhorias <small class="saved-note" id="gpEnhEmu"></small></h3>
+        <div class="enh" id="gpEnh"></div>
+      </section>
+
+      <div class="gp-two">
+        <section class="block" id="gpTrophyBlock">
+          <h3>Troféus <button class="link-btn" id="gpTrophies">ver todos</button></h3>
+          <div class="gp-trophies" id="gpTrophySummary"></div>
+        </section>
+        <section class="block">
+          <h3>Suas capturas <button class="link-btn" id="gpAllShots">ver todas</button></h3>
+          <div class="shots small" id="gpShots"></div>
+        </section>
+      </div>
+
+      <section class="block">
+        <h3>Gerenciar</h3>
+        <div class="options">
+          <div class="options-grid">
+            <label>Nome na biblioteca<input id="gpNameInput" spellcheck="false"></label>
+            <label id="gpArgsRow">Argumentos de inicialização<input id="gpArgs" spellcheck="false" placeholder="ex: -windowed -dx11"></label>
+          </div>
+          <label class="switch-row" style="margin:4px 0 0 !important">
+            <span>Não é um jogo <small>ex: Wallpaper Engine — para de contar tempo, sessões e XP do perfil</small></span>
+            <input type="checkbox" id="gpNotGame"><i class="switch"></i>
+          </label>
+          <div class="disk-row" id="gpDisk"></div>
+          <div class="option-buttons">
+            <button class="ghost-btn tall" id="gpSave">Salvar</button>
+            <button class="ghost-btn tall" id="gpMove" hidden>Mover para outro disco…</button>
+            <button class="ghost-btn tall" id="gpFolder">Abrir pasta do jogo</button>
+            <button class="ghost-btn tall" id="gpCoverBtn">Trocar capa</button>
+            <button class="ghost-btn tall" id="gpResetCover">Capa automática</button>
+            <button class="ghost-btn tall" id="gpStore">Ver na loja ↗</button>
+            <button class="ghost-btn tall danger" id="gpHide">Ocultar da biblioteca</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- perfil -->
+  <section class="page profile-page" id="profilePage">
+    <div class="pf-banner" id="pfBanner">
+      <img id="pfBannerImg" alt="">
+      <div class="pf-banner-shade"></div>
+      <button class="tb-btn page-close" data-close title="Voltar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button>
+    </div>
+    <div class="page-inner pf-body">
+      <header class="pf-head">
+        <div class="avatar huge" id="pfAvatar"></div>
+        <div class="pf-id">
+          <h2 class="pf-name" id="pfName"></h2>
+          <p class="pf-bio" id="pfBio"></p>
+          <div class="pf-level"><span class="lvl-badge" id="pfLevel"></span><div class="xp-bar"><b id="pfXpBar"></b></div><span id="pfXp"></span></div>
+        </div>
+        <button class="ghost-btn tall" id="pfRecap">Retrospectiva</button>
+        <button class="ghost-btn tall" id="pfEdit">Editar perfil</button>
+      </header>
+      <div class="pf-showcase" id="pfShowcase"></div>
+      <div class="stat-tiles" id="pfTiles"></div>
+      <div class="pf-grid">
+        <section class="block"><h3>Mais jogados</h3><div class="bars" id="pfTop"></div></section>
+        <section class="block"><h3>Recordes</h3><div class="records" id="pfRecords"></div></section>
+      </div>
+      <div class="pf-grid">
+        <section class="block"><h3>Metas da semana <small class="saved-note" id="pfGoalsEnd"></small></h3><div class="goals" id="pfGoals"></div></section>
+        <section class="block"><h3>Sequência</h3><div class="streak" id="pfStreak"></div></section>
+      </div>
+      <section class="block"><h3>Calendário de jogo <small class="saved-note" id="pfCalTotal"></small></h3><div class="calendar" id="pfCalendar"></div>
+        <h4 class="chart-title">Quando você joga <span>· dia da semana × hora</span></h4><div class="hourmap" id="pfHours"></div></section>
+      <section class="block"><h3>Troféus do GameDock <small class="saved-note" id="pfMetaCount"></small></h3><div class="meta-grid" id="pfMeta"></div></section>
+      <section class="block"><h3>Troféus recentes</h3><div class="recent-trophies" id="pfRecent"></div></section>
+    </div>
+  </section>
+
+  <!-- jogos grátis da semana (Epic) -->
+  <section class="page" id="freePage">
+    <div class="page-inner">
+      <header class="gl-head">
+        <div><small>Epic Games Store</small><h2>Grátis da semana</h2></div>
+        <button class="tb-btn page-close" data-close title="Voltar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button>
+      </header>
+      <div class="free-grid" id="freeNow"></div>
+      <h3 class="free-sub" id="freeNextTitle">Em breve</h3>
+      <div class="free-grid next" id="freeNext"></div>
+    </div>
+  </section>
+
+  <!-- sorteio -->
+  <div class="random-overlay" id="randomOverlay">
+    <small>O GameDock escolheu</small>
+    <div class="random-reel" id="randomReel"></div>
+    <strong id="randomName"></strong>
+    <div class="random-actions">
+      <button class="play-btn small" id="randomPlay"><span>Jogar</span></button>
+      <button class="ghost-btn tall" id="randomAgain">Sortear de novo</button>
+      <button class="ghost-btn tall" id="randomClose">Fechar</button>
+    </div>
+  </div>
+
+  <!-- primeira abertura -->
+  <div class="onboarding" id="onboarding">
+    <div class="ob-card">
+      <div class="ob-steps" id="obDots"></div>
+      <div class="ob-body" id="obBody"></div>
+      <div class="ob-actions">
+        <button class="link-btn" id="obSkip">Pular</button>
+        <button class="play-btn small" id="obNext"><span>Continuar</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- teclado na tela (controle) -->
+  <div class="osk" id="osk">
+    <div class="osk-card">
+      <input id="oskInput" spellcheck="false" autocomplete="off">
+      <div class="osk-keys" id="oskKeys"></div>
+    </div>
+  </div>
+
+  <canvas class="confetti" id="confetti"></canvas>
+  <div class="aurora" id="aurora" aria-hidden="true"></div>
+
+  <!-- retrospectiva -->
+  <section class="page" id="recapPage">
+    <div class="page-inner">
+      <header class="gl-head">
+        <div><small>Retrospectiva</small><h2 id="rcLabel"></h2></div>
+        <nav class="tabs" id="rcPeriods">
+          <button class="tab" data-period="week">Semana</button><button class="tab" data-period="month">Mês</button>
+        </nav>
+        <div class="rc-nav">
+          <button class="tb-btn" id="rcPrev" title="Anterior (←)">‹</button>
+          <button class="tb-btn" id="rcNext" title="Próximo (→)">›</button>
+        </div>
+        <button class="tb-btn page-close" data-close title="Voltar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button>
+      </header>
+      <div class="rc-hero" id="rcHero">
+        <img id="rcHeroImg" alt="">
+        <div class="rc-hero-text">
+          <small>Tempo jogado</small>
+          <b id="rcTotal"></b>
+          <span id="rcCompare"></span>
+        </div>
+        <div class="rc-top" id="rcTop"></div>
+      </div>
+      <div class="stat-tiles" id="rcTiles"></div>
+      <section class="block"><h3>Por dia</h3><div class="chart" id="rcChart"></div></section>
+      <div class="gp-two">
+        <section class="block"><h3>Troféus do período</h3><div class="recent-trophies" id="rcTrophies"></div></section>
+        <section class="block"><h3>Capturas</h3><div class="shots small" id="rcShots"></div></section>
+      </div>
+      <div class="rc-actions">
+        <button class="play-btn small" id="rcSave"><span>Salvar como imagem</span></button>
+        <button class="link-btn" id="rcOpenFolder">Abrir pasta de imagens ↗</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- editor do perfil -->
+  <div class="settings" id="profileEdit">
+    <div class="settings-panel pe-panel">
+      <header>
+        <h2>Editar perfil</h2>
+        <button type="button" class="tb-btn" id="peClose" title="Fechar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button>
+      </header>
+      <section>
+        <h3>Foto de perfil</h3>
+        <div class="pe-row">
+          <div class="avatar big" id="peAvatar"></div>
+          <div class="pe-buttons">
+            <button type="button" class="ghost-btn tall" id="peAvatarUpload">Enviar foto…</button>
+            <button type="button" class="ghost-btn tall" id="peAvatarGame">Capa de um jogo</button>
+            <button type="button" class="ghost-btn tall" id="peAvatarInitial">Usar inicial</button>
+          </div>
+        </div>
+        <div class="pe-grid" id="peAvatarGrid" hidden></div>
+      </section>
+      <section class="settings-sound">
+        <h3>Banner</h3>
+        <div class="pe-banner" id="peBanner"><img id="peBannerImg" alt=""></div>
+        <div class="pe-buttons" style="margin-top:12px">
+          <button type="button" class="ghost-btn tall" id="peBannerUpload">Enviar imagem…</button>
+          <button type="button" class="ghost-btn tall" id="peBannerGame">Arte de um jogo</button>
+          <button type="button" class="ghost-btn tall" id="peBannerDefault">Padrão</button>
+        </div>
+        <div class="pe-grid wide" id="peBannerGrid" hidden></div>
+        <label class="volume-row" style="margin-top:14px !important">
+          <span style="width:auto">Posição do recorte</span>
+          <input type="range" id="peBannerPos" min="0" max="100" step="1">
+        </label>
+      </section>
+      <section class="settings-sound">
+        <h3>Sobre você</h3>
+        <div class="options">
+          <label>Nome<input id="peName" maxlength="32" spellcheck="false"></label>
+          <label>Bio <small class="pe-count" id="peBioCount"></small><textarea id="peBio" maxlength="120" rows="2" placeholder="ex: caçador de platinas, fã de survival"></textarea></label>
+        </div>
+      </section>
+      <section class="settings-sound">
+        <h3>Cor do perfil</h3>
+        <div class="swatches" id="peColors"></div>
+      </section>
+      <section class="settings-sound">
+        <h3>Vitrine</h3>
+        <div class="options">
+          <label>Jogo favorito<select class="select" id="peShowGame"></select></label>
+        </div>
+        <p style="margin:14px 0 8px">Troféus em destaque <small class="pe-count" id="peTrophyCount"></small></p>
+        <div class="pe-trophies" id="peTrophies"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- galeria de capturas -->
+  <section class="page" id="galleryPage">
+    <div class="page-inner">
+      <header class="gl-head">
+        <div><small>Galeria</small><h2>Capturas</h2></div>
+        <span class="settings-hint" id="glHint"></span>
+        <button class="tb-btn page-close" data-close title="Voltar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button>
+      </header>
+      <nav class="tabs" id="glFilters"></nav>
+      <div class="shots big" id="glGrid"></div>
+    </div>
+  </section>
+
+  <div class="lightbox" id="lightbox">
+    <button class="lb-nav prev" id="lbPrev" title="Anterior (←)">‹</button>
+    <figure><div class="lb-stage" id="lbStage"><img id="lightboxImg" alt=""><video id="lightboxVideo" controls hidden></video><div class="crop-box" id="cropBox" hidden><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div><figcaption id="lightboxCaption"></figcaption></figure>
+    <button class="lb-nav next" id="lbNext" title="Próxima (→)">›</button>
+    <div class="lb-trim" id="lbTrim" hidden>
+      <div class="trim-track" id="trimTrack"><i class="trim-sel" id="trimSel"></i><b class="trim-h" id="trimStart"></b><b class="trim-h" id="trimEnd"></b></div>
+      <span id="trimLabel"></span>
+    </div>
+    <div class="lb-tools" id="lbTools">
+      <button class="ghost-btn tall" data-tool="copy">Copiar</button>
+      <button class="ghost-btn tall" data-tool="crop">Recortar</button>
+      <button class="ghost-btn tall" data-tool="trim">Cortar clipe</button>
+      <button class="ghost-btn tall" data-tool="vertical">Vertical 9:16</button>
+      <button class="ghost-btn tall" data-tool="discord">Mandar no Discord</button>
+      <button class="play-btn small" data-tool="apply" hidden><span>Salvar</span></button>
+      <button class="ghost-btn tall" data-tool="cancel" hidden>Cancelar</button>
+      <button class="ghost-btn tall lb-delete" id="lbDelete">Apagar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- bordas invisíveis para redimensionar a janela (sem a moldura do Windows) -->
+  <div class="resize-edges" aria-hidden="true">
+    <i data-edge="top"></i><i data-edge="bottom"></i><i data-edge="left"></i><i data-edge="right"></i>
+    <i data-edge="top-left"></i><i data-edge="top-right"></i><i data-edge="bottom-left"></i><i data-edge="bottom-right"></i>
+  </div>
+
+  <script src="vendor/hls.min.js"></script>
+  <script src="sound.js"></script>
+  <script src="app.js"></script>
+  <script src="pages.js"></script>
+  <script src="recap.js"></script>
+  <script src="emulators.js"></script>
+  <script src="features.js"></script>
+  <script src="padnav.js"></script>
+</body>
+</html>

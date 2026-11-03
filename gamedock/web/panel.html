@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>GameDock Painel</title>
+  <style>
+    :root { --accent: #8b7bff; --text: #f4f4f6; --muted: rgb(244 244 246 / .6); --glass: rgb(255 255 255 / .07);
+            --font: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; margin: 0; }
+    [hidden] { display: none !important; }
+    html, body { height: 100%; overflow: hidden; background: #0e0e13; color: var(--text); font-family: var(--font);
+                 user-select: none; -webkit-font-smoothing: antialiased; }
+    .panel { height: 100%; display: flex; flex-direction: column; opacity: 0; transform: translateX(18px);
+             transition: opacity .25s ease, transform .35s cubic-bezier(.2, .8, .2, 1); }
+    .panel.show { opacity: 1; transform: none; }
+    .head { position: relative; padding: 18px 18px 16px; min-height: 150px; display: flex; flex-direction: column; justify-content: flex-end;
+            background: #15151b center / cover; }
+    .head::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, #0e0e13 5%, rgb(14 14 19 / .55)); }
+    .head > * { position: relative; }
+    .head small { font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); font-weight: 750; }
+    .head h1 { font-size: 22px; font-weight: 850; letter-spacing: -.01em; margin: 4px 0 8px; line-height: 1.1; }
+    .head img.logo { max-height: 54px; max-width: 260px; object-fit: contain; object-position: left; margin: 6px 0 10px; }
+    .times { display: flex; gap: 18px; font-size: 12.5px; color: var(--muted); }
+    .times b { display: block; font-size: 20px; color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .close { position: absolute !important; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%; border: 0;
+             background: rgb(0 0 0 / .45); color: var(--text); font-size: 15px; cursor: pointer; }
+    .body { flex: 1; overflow-y: auto; padding: 14px 18px 10px; display: grid; gap: 16px; align-content: start; scrollbar-width: none; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .act { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px; border: 0; border-radius: 14px;
+           background: var(--glass); color: var(--text); font: 700 13.5px var(--font); text-align: left; cursor: pointer;
+           transition: background .15s, transform .15s; }
+    .act:hover { background: rgb(255 255 255 / .12); transform: translateY(-1px); }
+    .act svg { width: 22px; height: 22px; color: var(--accent); }
+    .act span { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+    .act.off { opacity: .55; }
+    h2 { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); font-weight: 750; margin-bottom: 10px; }
+    .trophy-row { display: flex; align-items: center; gap: 14px; }
+    .ring { position: relative; width: 58px; height: 58px; flex: none; }
+    .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ring circle { fill: none; stroke: rgb(255 255 255 / .1); stroke-width: 3.4; }
+    .ring circle.fill { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 97.4; }
+    .ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+    .icons { display: flex; gap: 6px; }
+    .icons img { width: 36px; height: 36px; border-radius: 8px; box-shadow: 0 0 0 2px var(--tier); }
+    .next { display: grid; gap: 8px; }
+    .next div { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 12px; background: rgb(255 255 255 / .04); }
+    .next img { width: 40px; height: 40px; border-radius: 8px; flex: none; filter: grayscale(.6); }
+    .next p { min-width: 0; font-size: 12px; color: var(--muted); line-height: 1.35; }
+    .next strong { display: block; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .next em { font-style: normal; color: var(--accent); font-weight: 700; }
+    .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .shots img, .shots video { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: #1a1a22; }
+    .empty-note { font-size: 12.5px; color: var(--muted); }
+    .foot { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px 14px; font-size: 12px; color: var(--muted); }
+    .foot kbd { padding: 2px 6px; border-radius: 5px; background: rgb(255 255 255 / .12); color: var(--text); font: 700 11px var(--font); }
+    .foot button { border: 0; background: none; color: var(--accent); font: 700 12px var(--font); cursor: pointer; }
+    .nogame { flex: 1; display: grid; place-items: center; text-align: center; padding: 30px; gap: 8px; color: var(--muted); }
+    .nogame strong { display: block; color: var(--text); font-size: 18px; margin-bottom: 6px; }
+    .msg { font-size: 12px; color: #ffb3b3; }
+  </style>
+</head>
+<body>
+  <div class="panel" id="panel">
+    <div id="withGame">
+      <header class="head" id="head">
+        <button class="close" id="close" title="Fechar (Alt+G)">✕</button>
+        <small>Jogando agora</small>
+        <img class="logo" id="logo" alt="" hidden>
+        <h1 id="name"></h1>
+        <div class="times"><div><b id="session">0:00</b>nesta sessão</div><div><b id="total"></b>no total</div></div>
+      </header>
+    </div>
+    <div class="body" id="body">
+      <div class="actions">
+        <button class="act" id="capture">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 7h3l2-2.5h6L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3.2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+          Capturar tela<span id="captureKey"></span>
+        </button>
+        <button class="act" id="clip">
+          <svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2.5" fill="currentColor"/><path d="M17 10.5l4-2.5v8l-4-2.5z" fill="currentColor"/></svg>
+          Gravar clipe<span id="clipHint">últimos 30 segundos</span>
+        </button>
+      </div>
+      <p class="msg" id="msg" hidden></p>
+      <section id="trophyBox">
+        <h2>Troféus</h2>
+        <div class="trophy-row">
+          <div class="ring"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5"/><circle class="fill" id="ringFill" cx="18" cy="18" r="15.5"/></svg><b id="ringText"></b></div>
+          <div><div class="icons" id="recentIcons"></div><p class="empty-note" id="trophyCount" style="margin-top:6px"></p></div>
+        </div>
+        <h2 style="margin-top:14px">Próximos mais fáceis</h2>
+        <div class="next" id="next"></div>
+      </section>
+      <section>
+        <h2>Últimas capturas</h2>
+        <div class="shots" id="shots"></div>
+      </section>
+    </div>
+    <div class="nogame" id="noGame" hidden>
+      <div><strong>Nenhum jogo aberto agora</strong>O painel mostra a sessão, os troféus e as capturas do jogo que estiver rodando.</div>
+    </div>
+    <footer class="foot"><span><kbd>Alt</kbd> + <kbd>G</kbd> fecha</span><button id="openApp">Abrir GameDock</button></footer>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const api = () => window.pywebview.api;
+    const TIER = { gold: "#f5c542", silver: "#c9d2de", bronze: "#d08a4c" };
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    let timer = null;
+
+    function fmtClock(sec) {
+      const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = Math.floor(sec % 60);
+      return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+    }
+    const fmtHours = (sec) => sec >= 36000 ? `${Math.round(sec / 3600)} h` : sec >= 3600 ? `${(sec / 3600).toFixed(1).replace(".", ",")} h` : `${Math.round(sec / 60)} min`;
+
+    async function openPanel() {
+      $("panel").classList.remove("show");
+      $("msg").hidden = true;
+      const d = await api().get_panel();
+      const g = d.game;
+      $("withGame").hidden = $("body").hidden = !g;
+      $("noGame").hidden = !!g;
+      $("captureKey").textContent = d.captureKey ? `ou ${d.captureKey}` : "";
+      $("clip").classList.toggle("off", !d.clipsEnabled);
+      $("clipHint").textContent = d.clipsEnabled ? "últimos segundos" : "ligue em Configurações → Clipes";
+      clearInterval(timer);
+      if (g) {
+        $("head").style.backgroundImage = g.hero ? `url("${g.hero}")` : "";
+        $("logo").hidden = !g.logo;
+        if (g.logo) $("logo").src = g.logo;
+        $("name").hidden = !!g.logo;
+        $("name").textContent = g.name;
+        $("total").textContent = fmtHours(d.playtime);
+        const tick = () => { $("session").textContent = d.sessionStart ? fmtClock(Date.now() / 1000 - d.sessionStart) : "—"; };
+        tick();
+        timer = setInterval(tick, 1000);
+        const t = d.trophies;
+        $("trophyBox").hidden = !t.total;
+        if (t.total) {
+          const ratio = t.unlocked / t.total;
+          $("ringFill").style.strokeDashoffset = 97.4 * (1 - ratio);
+          $("ringText").textContent = `${Math.round(ratio * 100)}%`;
+          $("trophyCount").textContent = `${t.unlocked} de ${t.total} troféus`;
+          $("recentIcons").innerHTML = t.recent.map((r) => `<img src="${r.icon}" title="${esc(r.name)}" style="--tier:${TIER[r.tier]}">`).join("");
+          $("next").innerHTML = t.next.length ? t.next.map((n) => `<div>${n.icon ? `<img src="${n.icon}">` : ""}
+            <p><strong>${esc(n.name)}</strong>${esc(n.desc)}${n.percent != null ? ` · <em>${n.percent.toFixed(1).replace(".", ",")}%</em>` : ""}</p></div>`).join("")
+            : `<p class="empty-note">Você já tem todos!</p>`;
+        }
+        $("shots").innerHTML = d.captures.length ? d.captures.map((c) => c.kind === "clip"
+          ? `<video src="${c.url}#t=1" preload="metadata" muted></video>` : `<img src="${c.url}">`).join("")
+          : `<p class="empty-note" style="grid-column:1/-1">Nenhuma captura deste jogo ainda.</p>`;
+      }
+      requestAnimationFrame(() => $("panel").classList.add("show"));
+    }
+
+    function closePanel() {
+      clearInterval(timer);
+      $("panel").classList.remove("show");
+    }
+
+    $("close").addEventListener("click", () => api().panel_close());
+    $("openApp").addEventListener("click", () => api().panel_open_app());
+    $("capture").addEventListener("click", () => api().panel_capture());
+    $("clip").addEventListener("click", async () => {
+      const r = await api().panel_clip();
+      if (!r.ok) { $("msg").textContent = r.error; $("msg").hidden = false; }
+    });
+  </script>
+</body>
+</html>
