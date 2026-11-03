@@ -5,7 +5,7 @@ jogos instalados (Steam, Epic, GOG, Ubisoft, Riot, Google Play Games, jogos solt
 coloca tudo num só lugar e permite **dar play** em qualquer um, com uma interface própria
 no estilo console.
 
-> Status: **v0.4.0**: backup de saves, atualização automática pelo GitHub, PS1/PS2/NES, Modo Jogo, desafios e
+> Status: **v0.5.0**: Downloads por fontes (formato do Hydra). Antes, na v0.4: backup de saves, atualização automática pelo GitHub, PS1/PS2/NES, Modo Jogo, desafios e
 > uso completo pelo controle. Código e versões em github.com/luizhenriquevfernandes2008-ops/GameDock.
 > (O projeto se chamava *GameHub* na v0.1; a pasta continua `C:\Users\luizv\GameHub`.)
 
@@ -66,7 +66,8 @@ ativar a Google Drive API; `npx firebase-tools login` para publicar as regras. E
 | v0.1 | Detecção automática, biblioteca persistente, iniciar jogos, configs via CLI | ✅ |
 | v0.2 | Interface estilo console, cor dinâmica, capas automáticas, `GameDock.exe` | ✅ |
 | v0.3 | App de verdade (instalador, bandeja, instância única), troféus, capturas, clipes, perfil, PS3 | ✅ |
-| **v0.4** | Saves, atualização automática, logs, PS1/PS2/NES + RetroAchievements, Modo Jogo, Alt+G completo, status/anotações/tempo para zerar, desafios, editor de mídia, primeira abertura, controle em tudo | ✅ |
+| v0.4 | Saves, atualização automática, logs, PS1/PS2/NES + RetroAchievements, Modo Jogo, Alt+G completo, status/anotações/tempo para zerar, desafios, editor de mídia, primeira abertura, controle em tudo | ✅ |
+| **v0.5** | Downloads: fontes no formato do Hydra, busca com capas, fila HTTP + torrent, extrair/instalar/adicionar à biblioteca | ✅ |
 | final | Perfis, contas e backup de saves na nuvem | ⏳ |
 
 ---
@@ -219,6 +220,30 @@ Jogos precisam ser cópias dos discos do próprio usuário; o GameDock não baix
 | **Visual** | Temas, fundo animado, música do menu dos jogos de PS3, tamanho do texto, cores para daltônicos, reduzir movimento, Modo Console (liga direto em tela cheia) |
 | **Primeira abertura** | Apresentação guiada (nome, jogos encontrados, emuladores, controle, dicas); de novo em Configurações → Sobre |
 | **Tudo pelo controle** (`web/padnav.js`) | Nas telas com campos o direcional move um destaque, A confirma, B volta; campos de texto abrem um teclado na tela |
+
+### Downloads — fontes no formato do Hydra (v0.5, `sources.py`, `downloads.py`, `web/downloads.js`)
+
+Botão de seta na barra de título (tecla **D**), com um anel que mostra o progresso total. Três abas:
+
+- **Fontes**: o usuário cola a URL (ou caminho) de um JSON no formato do Hydra
+  (`{"name", "downloads": [{"title", "uris", "fileSize", "uploadDate"}]}`). **O GameDock não vem com nenhuma
+  fonte** e nunca sugere uma: o que se adiciona e baixa é responsabilidade de quem usa. O conteúdo é tratado como dado
+  não confiável: limite de 80 MB, só links `magnet:`/`http(s)` (o resto é descartado), texto sempre escapado na tela.
+  As fontes são atualizadas sozinhas ao abrir o app (a cada 6 h); se uma falhar, fica a cópia anterior.
+- **Buscar**: procura em todas as fontes; os títulos são limpos ("Jogo X: Deluxe Edition (v1.2 + 3 DLCs) [Repack]" →
+  "Jogo X") e agrupados, com capa/fundo da loja da Steam (só nome idêntico). Selo "Na biblioteca" quando já está
+  instalado. Ao clicar: as versões (fonte, tamanho, data) e um botão por link (Torrent ou o site do link direto).
+- **Downloads**: fila com progresso, velocidade, tempo restante e pares. Pausar/continuar/cancelar (cancelar pede
+  confirmação e só apaga a pasta que o próprio GameDock criou). Fechar o app no meio não perde nada: HTTP continua
+  com `Range` a partir do `.part`, torrent pelo "fastresume" (`downloads/<id>.resume`).
+  Ao terminar: **Extrair** (.zip nativo, com proteção contra caminhos saindo da pasta; .rar/.7z pelo 7-Zip instalado,
+  sem esperar senha), **Apagar compactados**, **Instalar** (abre o `setup.exe` que veio junto, só no clique),
+  **Adicionar à biblioteca** (a pasta de downloads entra em `scan_folders` e cada subpasta vira um jogo).
+- Cada download vai para `<pasta>/<nome do jogo>/`; se já existir uma pasta com esse nome e com arquivos, usa
+  "Nome (2)". Espaço livre é conferido antes de começar.
+- Opções: pasta (padrão `Downloads\GameDock`), seed depois de baixar (desligado), limite de velocidade dos torrents.
+- Torrent com **libtorrent** (`pip install libtorrent`, vai junto no build). Links diretos que abrem uma página de site
+  (hosts de arquivo com botão de download) dão um erro claro em vez de baixar HTML; não fazemos "raspagem" desses sites.
 
 ### Navegação, páginas e perfil
 

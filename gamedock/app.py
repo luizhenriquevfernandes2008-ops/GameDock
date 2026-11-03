@@ -1,6 +1,7 @@
 """Interface gráfica: janela nativa (WebView2) desenhada em HTML/CSS em gamedock/web."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -17,9 +18,9 @@ from urllib.parse import quote, unquote
 
 import webview
 
-from . import (__version__, achievements, backup, captures, challenges, clips, disk, dualsense, emulators, freegames,
+from . import (__version__, achievements, backup, captures, challenges, clips, disk, downloads, dualsense, emulators, freegames,
                gameinfo, gamemode, logs, mediaedit, player, quickset, recap, recorder, retroach, saves, sgdb, shell,
-               timetobeat, updater)
+               sources, timetobeat, updater)
 from .art import as_url, clear_memory, custom_cover, get_art, set_custom_cover, shrink_image
 from .launcher import LaunchError, clean_dll_search, launch
 from .live import LiveService, trophies_for_ui
@@ -232,6 +233,104 @@ class Api:
         return freegames.fetch()
 
     # ------------------------------------------------------------ saves
+
+    # ------------------------------------------------------------ fontes e downloads (sources.py, downloads.py)
+
+    def sources_list(self) -> dict:
+        return sources.stats()
+
+    def sources_add(self, url: str) -> dict:
+        return sources.add_source(url)
+
+    def sources_remove(self, source_id: str) -> dict:
+        sources.remove_source(source_id)
+        return sources.stats()
+
+    def sources_refresh(self) -> dict:
+        sources.refresh(force=True)
+        return sources.stats()
+
+    def store_search(self, query: str) -> list[dict]:
+        owned = {sources.norm(g.display_name).replace(" ", "") for g in Library().games.values()}
+        groups = sources.search(query)
+        for group in groups:
+            group["owned"] = group["key"] in owned
+        return groups
+
+    def store_art(self, name: str) -> dict:
+        return sources.steam_art(name)
+
+    def downloads_list(self) -> dict:
+        _wire_downloads(self)
+        m = downloads.manager()
+        config = load_config()
+        return {"jobs": m.list(), "summary": m.summary(), "dir": downloads.downloads_dir(),
+                "torrent": downloads.lt is not None, "seed": bool(config.get("downloads_seed")),
+                "limit": int(config.get("downloads_limit_kb") or 0), "sevenZip": bool(downloads.seven_zip())}
+
+    def download_start(self, option: dict, uri: str, folder: str | None = None) -> dict:
+        return downloads.manager().start(option, uri, folder)
+
+    def download_action(self, job_id: str, action: str, arg: str | None = None) -> dict:
+        m = downloads.manager()
+        if action == "pause":
+            m.pause(job_id)
+        elif action == "resume":
+            m.resume(job_id)
+        elif action == "cancel":
+            m.cancel(job_id, delete_files=True)
+        elif action == "remove":
+            m.cancel(job_id, delete_files=False)
+        elif action == "extract":
+            return m.extract(job_id)
+        elif action == "clean":
+            return {"ok": True, "freed": m.delete_archives(job_id)}
+        elif action == "setup":
+            return m.run_setup(job_id, arg or "")
+        elif action == "open":
+            job = m.jobs.get(job_id)
+            if job and Path(job["dir"]).is_dir():
+                os.startfile(job["dir"])
+        elif action == "library":
+            return self._add_download_to_library(job_id)
+        return {"ok": True}
+
+    def _add_download_to_library(self, job_id: str) -> dict:
+        job = downloads.manager().jobs.get(job_id)
+        if not job:
+            return {"ok": False, "error": "download não encontrado"}
+        root = job.get("root") or str(Path(job["dir"]).parent)
+        config = load_config()
+        if root not in config.get("scan_folders", []):
+            config["scan_folders"] = config.get("scan_folders", []) + [root]   # cada subpasta vira um jogo
+            save_config(config)
+        report = self.scan()
+        return {"ok": True, "new": report["new"]}
+
+    def download_choose_folder(self) -> str | None:
+        picked = self._window.create_file_dialog(webview.FOLDER_DIALOG, directory=downloads.downloads_dir())
+        return picked[0] if picked else None
+
+    def downloads_settings(self, changes: dict) -> dict:
+        config = load_config()
+        if "dir" in changes and changes["dir"]:
+            config["downloads_dir"] = changes["dir"]
+        if "seed" in changes:
+            config["downloads_seed"] = bool(changes["seed"])
+        if "limit" in changes:
+            config["downloads_limit_kb"] = max(0, int(changes["limit"] or 0))
+            session = downloads.manager()._session
+            if session is not None:
+                session.apply_settings({"download_rate_limit": config["downloads_limit_kb"] * 1024})
+        save_config(config)
+        return self.downloads_list()
+
+    def disk_free(self, folder: str | None = None) -> dict:
+        path = Path(folder or downloads.downloads_dir())
+        while not path.exists() and path.parent != path:
+            path = path.parent
+        usage = shutil.disk_usage(path)
+        return {"free": usage.free, "total": usage.total, "drive": path.anchor}
 
     def get_saves(self, game_id: str) -> dict:
         game = Library().games.get(game_id)
@@ -860,6 +959,15 @@ RESIZE_EDGES = {"left": HTLEFT, "right": HTRIGHT, "top": HTTOP, "bottom": HTBOTT
 UNLOAD_AFTER = 15  # segundos escondido na bandeja até descarregar a interface
 
 
+def _wire_downloads(api: "Api") -> None:
+    """Liga o gerenciador de downloads à janela: a barra de título mostra o progresso."""
+    m = downloads.manager()
+    if m.on_change is None:
+        def push(summary: dict) -> None:
+            api._window.evaluate_js(f"window.onDownloads && window.onDownloads({json.dumps(summary)})")
+        m.on_change = push
+
+
 def on_screen(geometry: dict) -> bool:
     """A barra de título da janela cai dentro de algum monitor? (protege contra -32000 e monitor desconectado)"""
     import ctypes
@@ -942,6 +1050,8 @@ class Shell:
     def on_closed(self) -> None:
         self.quitting = True
         self.tray.stop()
+        if downloads._manager is not None:
+            downloads._manager.shutdown()   # guarda o progresso dos torrents
         for w in self.extra_windows:
             try:
                 w.destroy()
@@ -1156,5 +1266,8 @@ def run() -> None:
             api._window.toggle_fullscreen()
         if config.get("lightbar_sync"):
             threading.Thread(target=api.sync_lightbar, daemon=True).start()
+        threading.Thread(target=sources.refresh, name="fontes", daemon=True).start()
+        if (data_dir() / "downloads.json").is_file():   # tem download para continuar
+            _wire_downloads(api)
 
     webview.start(started, debug=False)

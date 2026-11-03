@@ -656,6 +656,7 @@ function handleInput(key, e) {
     m: toggleMute,
     t: openTrophies,
     g: openGallery,
+    d: () => window.openStore && openStore(),
     p: openProfile,
     w: () => openRecap("week", 0),
     q: () => switchTab(-1),

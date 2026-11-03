@@ -4,7 +4,7 @@
 
 const PAD_ROOTS = {
   settings: "settings", profileEdit: "profileEdit", gamePage: "gamePage", profile: "profilePage", gallery: "galleryPage",
-  recap: "recapPage", free: "freePage", onboarding: "onboarding", random: "randomOverlay", osk: "osk",
+  recap: "recapPage", free: "freePage", store: "storePage", storeModal: "stModal", onboarding: "onboarding", random: "randomOverlay", osk: "osk",
 };
 const FOCUSABLE = 'button:not([disabled]), input:not([type="checkbox"]):not([disabled]), select:not([disabled]), textarea, label.switch-row, .tp-item, .shot, [data-trailer], [data-shot]';
 

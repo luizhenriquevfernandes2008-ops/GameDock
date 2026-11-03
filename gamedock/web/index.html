@@ -35,6 +35,10 @@
     <button class="tb-btn" id="randomBtn" title="Sortear um jogo (S)">
       <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><circle cx="15" cy="15" r="1.5" fill="currentColor"/><circle cx="15" cy="9" r="1.5" fill="currentColor"/><circle cx="9" cy="15" r="1.5" fill="currentColor"/></svg>
     </button>
+    <button class="tb-btn dl-btn" id="dlBtn" title="Downloads (D)">
+      <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg class="dl-ring" viewBox="0 0 36 36" hidden><circle cx="18" cy="18" r="16" pathLength="100"/></svg>
+    </button>
     <button class="tb-btn" id="freeBtn" title="Jogos grátis da semana">
       <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7h18v3H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1.2C7 7 12 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 12 7 12 7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
       <i class="dot" id="freeDot" hidden></i>
@@ -556,6 +560,85 @@
     </div>
   </section>
 
+  <!-- downloads: fontes no formato do Hydra (sources.py) + gerenciador (downloads.py) -->
+  <section class="page store-page" id="storePage">
+    <div class="page-inner">
+      <header class="gl-head">
+        <div><small>Downloads</small><h2 id="stTitle">Buscar jogos</h2></div>
+        <span class="settings-hint" id="stHint"></span>
+        <button class="tb-btn page-close" data-close title="Voltar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button>
+      </header>
+      <nav class="tabs" id="stTabs">
+        <button class="tab on" data-st="search">Buscar</button>
+        <button class="tab" data-st="queue">Downloads <small id="stQueueCount"></small></button>
+        <button class="tab" data-st="sources">Fontes <small id="stSourceCount"></small></button>
+      </nav>
+
+      <div class="st-pane" data-pane="search">
+        <div class="field-row st-search">
+          <input id="stQuery" placeholder="Nome do jogo..." spellcheck="false" autocomplete="off">
+          <button class="ghost-btn" id="stGo">Buscar</button>
+        </div>
+        <div class="st-empty" id="stSearchEmpty"></div>
+        <div class="st-grid" id="stResults"></div>
+      </div>
+
+      <div class="st-pane" data-pane="queue" hidden>
+        <div class="st-jobs" id="stJobs"></div>
+      </div>
+
+      <div class="st-pane" data-pane="sources" hidden>
+        <section class="block">
+          <h3>Adicionar fonte</h3>
+          <p class="st-note">O GameDock não vem com nenhuma fonte. Cole o link de um JSON no formato do Hydra
+            (<code>{"name", "downloads": [{"title", "uris", "fileSize", "uploadDate"}]}</code>) ou o caminho de um arquivo .json.
+            Os links são abertos como dados: só entram links magnet e http(s). Você é responsável pelo que baixar.</p>
+          <div class="field-row">
+            <input id="stSourceUrl" placeholder="https://.../fonte.json" spellcheck="false" autocomplete="off">
+            <button class="ghost-btn" id="stSourceAdd">Adicionar</button>
+          </div>
+          <p class="st-msg" id="stSourceMsg"></p>
+        </section>
+        <section class="block">
+          <h3>Suas fontes <button class="link-btn" id="stSourcesRefresh">Atualizar todas</button></h3>
+          <div class="st-sources" id="stSources"></div>
+        </section>
+        <section class="block">
+          <h3>Opções</h3>
+          <label>Pasta dos downloads</label>
+          <div class="field-row st-dir">
+            <input id="stDir" readonly>
+            <button class="ghost-btn" id="stDirPick">Trocar</button>
+          </div>
+          <p class="st-msg" id="stDisk"></p>
+          <label class="switch-row"><span>Continuar compartilhando (seed) depois de baixar<small>Só para torrents. Desligado: o torrent para quando termina.</small></span>
+            <input type="checkbox" id="stSeed"><i class="switch"></i></label>
+          <label>Limite de velocidade dos torrents</label>
+          <div class="field-row st-limit">
+            <select id="stLimit">
+              <option value="0">Sem limite</option><option value="1024">1 MB/s</option><option value="2560">2,5 MB/s</option>
+              <option value="5120">5 MB/s</option><option value="10240">10 MB/s</option><option value="25600">25 MB/s</option>
+            </select>
+          </div>
+          <p class="st-msg" id="stTools"></p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- escolher a versão para baixar -->
+  <div class="st-modal" id="stModal">
+    <div class="st-dialog">
+      <div class="st-dialog-hero" id="stModalHero"></div>
+      <div class="st-dialog-body">
+        <header><div><small id="stModalOwned"></small><h3 id="stModalName"></h3></div>
+          <button class="tb-btn" id="stModalClose" title="Fechar (Esc)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg></button></header>
+        <div class="st-dest"><span>Salvar em</span><code id="stModalDir"></code><button class="link-btn" id="stModalDirPick">Trocar</button><small id="stModalDisk"></small></div>
+        <div class="st-options" id="stOptions"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- sorteio -->
   <div class="random-overlay" id="randomOverlay">
     <small>O GameDock escolheu</small>
@@ -730,6 +813,7 @@
   <script src="recap.js"></script>
   <script src="emulators.js"></script>
   <script src="features.js"></script>
+  <script src="downloads.js"></script>
   <script src="padnav.js"></script>
 </body>
 </html>
