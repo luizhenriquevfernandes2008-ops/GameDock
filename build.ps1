@@ -1,5 +1,5 @@
 ﻿# Gera dist\GameDock\ (o app) e dist\GameDock-Setup.exe (instalador com o app dentro).
-# Requer: python -m pip install pyinstaller pywebview pystray pillow libtorrent
+# Requer: python -m pip install pyinstaller pywebview pystray pillow
 #
 # O app é "onedir" (pasta) em vez de "onefile": o onefile descompacta ~13 MB numa pasta temporária
 # a cada abertura (~1,5 s a mais). Só o instalador é onefile, porque ele roda uma vez.
