@@ -35,6 +35,9 @@ from .storage import data_dir
 TOKEN_URL = "https://discord.com/api/oauth2/token"
 REDIRECT_URI = "http://localhost"
 SCOPES = ["rpc", "rpc.voice.read", "rpc.voice.write", "rpc.notifications.read", "identify"]
+GROUP_SCOPE = "dm_channels.read"      # lista de grupos e DMs (pedida à parte: o Discord pode recusar para app não aprovado)
+API = "https://discord.com/api/v10"
+DM, GROUP_DM = 1, 3
 CDN = "https://cdn.discordapp.com"
 PIPE_DIR = "\\\\.\\pipe\\"   # \\.\pipe\
 
@@ -133,7 +136,7 @@ def _post_token(form: dict) -> dict:
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise DiscordError(f"sem conexão com o Discord ({exc.__class__.__name__})") from exc
     return {"access_token": body["access_token"], "refresh_token": body.get("refresh_token", ""),
-            "expires_at": time.time() + int(body.get("expires_in", 604800))}
+            "expires_at": time.time() + int(body.get("expires_in", 604800)), "scope": body.get("scope", "")}
 
 
 # ---------------------------------------------------------------- cliente
@@ -303,8 +306,13 @@ class DiscordClient:
                 pass
         if not interactive:
             raise DiscordError("conecte o Discord no GameDock")
+        fresh = self._authorize(SCOPES)
+        self._authenticate(fresh["access_token"])
+
+    def _authorize(self, scopes: list[str]) -> dict:
+        """Pede a autorização no Discord (a pessoa aceita lá) e troca o código por um token, que fica salvo."""
         verifier, challenge = _pkce()
-        data = self.command("AUTHORIZE", {"client_id": self.client_id, "scopes": SCOPES,
+        data = self.command("AUTHORIZE", {"client_id": self.client_id, "scopes": scopes,
                                           "code_challenge": challenge, "code_challenge_method": "S256"},
                             timeout=180)
         if not data.get("code"):
@@ -313,7 +321,57 @@ class DiscordClient:
                              "redirect_uri": REDIRECT_URI, "code_verifier": verifier})
         fresh["client_id"] = self.client_id
         save_token(fresh)
-        self._authenticate(fresh["access_token"])
+        return fresh
+
+    # --- grupos e DMs
+    def has_group_scope(self) -> bool:
+        token = load_token(self.client_id) or {}
+        return GROUP_SCOPE in (token.get("scope") or "").split()
+
+    def enable_groups(self) -> None:
+        """Segundo pedido no Discord, agora com a permissão de ler grupos e DMs."""
+        fresh = self._authorize(SCOPES + [GROUP_SCOPE])
+        if GROUP_SCOPE not in (fresh.get("scope") or "").split():
+            raise DiscordError("o Discord não liberou a lista de grupos para este app")
+
+    def _rest(self, path: str):
+        token = load_token(self.client_id) or {}
+        if token.get("expires_at", 0) < time.time() + 300 and token.get("refresh_token"):
+            token = _post_token({"client_id": self.client_id, "grant_type": "refresh_token",
+                                 "refresh_token": token["refresh_token"]})
+            token["client_id"] = self.client_id
+            save_token(token)
+        req = urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token.get('access_token', '')}",
+                                                          "User-Agent": "GameDock (Windows game launcher)"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read() or b"null")
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise DiscordError("o Discord não liberou a lista de grupos para este app") from exc
+            raise DiscordError(f"o Discord recusou ({exc.code})") from exc
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise DiscordError("sem conexão com o Discord") from exc
+
+    def private_channels(self) -> list[dict]:
+        """Todos os grupos e DMs da conta (só com a permissão extra)."""
+        out = []
+        for c in self._rest("/users/@me/channels") or []:
+            if c.get("type") not in (DM, GROUP_DM):
+                continue
+            out.append({"id": c["id"], "type": c["type"], "name": c.get("name") or "",
+                        "icon": f"{CDN}/channel-icons/{c['id']}/{c['icon']}.png?size=64" if c.get("icon") else "",
+                        "recipients": [{"id": u.get("id", ""), "name": u.get("global_name") or u.get("username", ""),
+                                        "avatar": avatar_url(u)} for u in c.get("recipients") or []],
+                        "last": int(c.get("last_message_id") or 0)})
+        return out
+
+    def channel_info(self, channel_id: str) -> dict:
+        """Um canal pelo RPC (vale para grupo e DM): tipo, nome e quem está na call agora."""
+        data = self.command("GET_CHANNEL", {"channel_id": channel_id})
+        return {"id": data.get("id", channel_id), "type": data.get("type"), "name": data.get("name") or "",
+                "guild_id": data.get("guild_id"),
+                "members": [member(v, self.speaking) for v in data.get("voice_states") or []]}
 
     def _authenticate(self, access_token: str) -> None:
         data = self.command("AUTHENTICATE", {"access_token": access_token})
@@ -385,6 +443,13 @@ class DiscordClient:
             for evt in events:
                 self._subscribe(evt, {"channel_id": channel_id})
         self.on_event("CALL_CHANGED", {"channel_id": channel_id})
+        if channel_id:
+            try:
+                info = self.channel_info(channel_id)
+                if info.get("type") in (DM, GROUP_DM):
+                    self.on_event("PRIVATE_SEEN", info)
+            except DiscordError:
+                pass
 
     def _dispatch(self, evt: str, data: dict) -> None:
         if evt == "VOICE_CHANNEL_SELECT":
@@ -499,3 +564,47 @@ def is_running() -> bool:
         return any(name.startswith("discord-ipc-") for name in os.listdir(PIPE_DIR))
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------- grupos lembrados
+
+def _groups_path():
+    return data_dir() / "discord_groups.json"
+
+
+def remembered_groups() -> dict:
+    try:
+        return json.loads(_groups_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def remember_group(channel_id: str, **info) -> None:
+    groups = remembered_groups()
+    entry = groups.get(channel_id, {})
+    for key, value in info.items():
+        if value:
+            entry[key] = value
+    if info.get("recipients"):   # junta quem já apareceu no grupo (calls e mensagens)
+        known = {r["id"]: r for r in groups.get(channel_id, {}).get("recipients", [])}
+        known.update({r["id"]: r for r in info["recipients"] if r.get("id")})
+        entry["recipients"] = list(known.values())[:12]
+    entry["last"] = time.time()
+    groups[channel_id] = entry
+    path = _groups_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(groups, ensure_ascii=False), encoding="utf-8")
+
+
+def forget_group(channel_id: str) -> None:
+    groups = remembered_groups()
+    if groups.pop(channel_id, None) is not None:
+        _groups_path().write_text(json.dumps(groups, ensure_ascii=False), encoding="utf-8")
+
+
+def parse_channel_ref(text: str) -> str:
+    """Aceita o link do grupo (discord.com/channels/@me/<id>) ou só o ID."""
+    import re
+    text = (text or "").strip()
+    m = re.search(r"channels/@me/(\d{15,22})", text) or re.fullmatch(r"(\d{15,22})", text)
+    return m.group(1) if m else ""

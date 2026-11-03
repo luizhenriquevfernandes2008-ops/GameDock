@@ -9,6 +9,7 @@
     headOff: '<svg viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 13.5-5.8M20 12v3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="5" height="7" rx="2" fill="currentColor"/><rect x="16" y="14" width="5" height="7" rx="2" fill="currentColor"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     leave: '<svg viewBox="0 0 24 24"><path d="M3.5 13.5c4.7-4.6 12.3-4.6 17 0l-2.3 2.3-3.4-1.5v-2.4a10 10 0 0 0-5.6 0v2.4l-3.4 1.5z" fill="currentColor"/></svg>',
     voice: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+    group: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5" fill="currentColor"/><circle cx="17" cy="9.5" r="2.7" fill="currentColor"/><path d="M2.5 19.5c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5zM15.8 14.2c2.9-.3 5.2 1.3 5.7 4.8h-4.4c-.2-1.9-.6-3.5-1.3-4.8z" fill="currentColor"/></svg>',
     hash: '<svg viewBox="0 0 24 24"><path d="M10 3L8 21M16 3l-2 18M4 8.5h17M3 15.5h17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>',
@@ -41,7 +42,7 @@
       dc.guilds = g.data;
     }
     renderGuilds();
-    if (!dc.guild && dc.guilds.length) dc.guild = dc.guilds[0].id;
+    if (!dc.guild) dc.guild = HOME;   // grupos e DMs primeiro: é onde as calls com amigos acontecem
     await Promise.all([loadChannels(), loadCall()]);
   }
 
@@ -65,8 +66,10 @@
 
   function dcError(msg) { toast(`Discord: ${msg}`, true); }
 
+  const HOME = "@me";
+
   function renderGuilds() {
-    $("dcGuilds").innerHTML = dc.guilds.map((g) => `<button class="dc-guild${g.id === dc.guild ? " on" : ""}" data-guild="${esc(g.id)}" title="${esc(g.name)}">
+    $("dcGuilds").innerHTML = `<button class="dc-guild home${dc.guild === HOME ? " on" : ""}" data-guild="${HOME}" title="Grupos e DMs">${ICON.group}</button><i class="dc-sep"></i>` + dc.guilds.map((g) => `<button class="dc-guild${g.id === dc.guild ? " on" : ""}" data-guild="${esc(g.id)}" title="${esc(g.name)}">
       ${g.icon ? `<img src="${esc(g.icon)}" alt="">` : `<span>${esc(g.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 3))}</span>`}</button>`).join("");
     $("dcGuilds").querySelectorAll("[data-guild]").forEach((b) => b.addEventListener("click", () => {
       dc.guild = b.dataset.guild;
@@ -76,6 +79,8 @@
   }
 
   async function loadChannels() {
+    $("dcText").previousElementSibling.hidden = $("dcText").hidden = dc.guild === HOME;
+    if (dc.guild === HOME) return loadGroups();
     const guild = dc.guilds.find((g) => g.id === dc.guild);
     $("dcGuildName").textContent = guild?.name || "";
     if (!guild) return;
@@ -96,9 +101,69 @@
     $("dcText").querySelectorAll("[data-text]").forEach((b) => b.addEventListener("click", () => api().discord_open_text(guild.id, b.dataset.text)));
   }
 
+  // ---------------------------------------------- grupos e DMs
+
+  async function loadGroups() {
+    $("dcGuildName").textContent = "Grupos e DMs";
+    if (!$("dcVoice").querySelector(".dc-group")) $("dcVoice").innerHTML = `<p class="shots-empty">Carregando…</p>`;
+    const r = await api().discord_groups();
+    if (dc.guild !== HOME) return;
+    if (!r.ok) { $("dcVoice").innerHTML = `<p class="shots-empty">${esc(r.error)}</p>`; return; }
+    const { auto, error, groups } = r.data;
+    const setup = auto ? (error ? `<p class="dc-msg">${esc(error)}</p>` : "") : `
+      <div class="dc-groups-setup">
+        <div><b>Mostrar todos os seus grupos</b>
+          <p>O Discord só entrega a lista de grupos com uma permissão a mais. Clique e aceite o pedido no Discord.
+            Os grupos em que você entrar em call ou que te mandarem mensagem também aparecem aqui sozinhos.</p></div>
+        <button class="play-btn small" id="dcGroupsAuto"><span>Carregar meus grupos</span></button>
+        <div class="dc-add">
+          <input id="dcAddInput" placeholder="ou cole o link/ID de um grupo" spellcheck="false" autocomplete="off">
+          <button class="ghost-btn tall" id="dcAddBtn">Adicionar</button>
+        </div>
+        <small>ID do grupo: no Discord, Configurações → Avançado → Modo desenvolvedor; depois botão direito no grupo → Copiar ID do canal.</small>
+      </div>`;
+    const avatarStack = (g) => g.icon ? `<img class="dc-gicon" src="${esc(g.icon)}" alt="">`
+      : `<span class="dc-gstack">${g.recipients.slice(0, 3).map((u) => `<img src="${esc(u.avatar)}" alt="">`).join("") || ICON.group}</span>`;
+    const card = (g) => `
+      <div class="dc-chan dc-group${g.here ? " here" : ""}">
+        <div class="dc-chan-head">${avatarStack(g)}
+          <b>${esc(g.name)}<small>${g.type === 3 ? `${g.recipients.length + 1} pessoas` : "Mensagem direta"}${g.members.length ? ` · <i class="live">${g.members.length} na call</i>` : ""}</small></b>
+          <button class="ghost-btn" data-open="${esc(g.id)}" title="Abrir no Discord">Abrir</button>
+          ${auto ? "" : `<button class="ghost-btn" data-forget="${esc(g.id)}" title="Tirar da lista">✕</button>`}
+          <button class="play-btn small" data-join="${esc(g.id)}" ${g.here ? "disabled" : ""}><span>${g.here ? "Você está aqui" : g.members.length ? "Entrar na call" : "Ligar"}</span></button>
+        </div>
+        ${g.members.length ? `<div class="dc-mini">${g.members.map((m) => `<span class="${m.speaking ? "speaking" : ""}" data-user="${esc(m.id)}">
+          <img src="${esc(m.avatar)}" alt="">${esc(m.name)}${m.mute ? ICON.micOff : ""}</span>`).join("")}</div>` : ""}
+      </div>`;
+    const live = groups.filter((g) => g.members.length);
+    const rest = groups.filter((g) => !g.members.length);
+    $("dcVoice").innerHTML = setup
+      + (live.length ? `<h4 class="dc-sub">Calls acontecendo agora</h4>${live.map(card).join("")}` : "")
+      + (rest.length ? `<h4 class="dc-sub">${live.length ? "Outros grupos" : "Seus grupos"}</h4>${rest.map(card).join("")}` : "")
+      + (!groups.length ? `<p class="shots-empty" style="margin-top:14px">Nenhum grupo ainda.</p>` : "");
+    $("dcVoice").querySelectorAll("[data-join]").forEach((b) => b.addEventListener("click", () => join(b.dataset.join)));
+    $("dcVoice").querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => api().discord_open_text("", b.dataset.open)));
+    $("dcVoice").querySelectorAll("[data-forget]").forEach((b) => b.addEventListener("click", async () => { await api().discord_forget_group(b.dataset.forget); loadGroups(); }));
+    $("dcGroupsAuto")?.addEventListener("click", async () => {
+      toast("Olhe o Discord: aceite o pedido para o GameDock ver seus grupos.");
+      const res = await api().discord_enable_groups();
+      if (!res.ok) return dcError(res.error);
+      Sfx.play("open");
+      loadGroups();
+    });
+    const add = async () => {
+      const res = await api().discord_add_group($("dcAddInput").value);
+      if (!res.ok) return dcError(res.error);
+      $("dcAddInput").value = "";
+      loadGroups();
+    };
+    $("dcAddBtn")?.addEventListener("click", add);
+    $("dcAddInput")?.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); add(); } });
+  }
+
   async function join(id) {
     if (dc.call?.id === id) return;
-    toast("Entrando na call…");
+    toast(dc.guild === HOME ? "Chamando no Discord…" : "Entrando na call…");
     const r = await api().discord_join(id);
     if (!r.ok) return dcError(r.error);
     Sfx.play("open");

@@ -110,6 +110,10 @@
         <div class="members" id="callMembers"></div>
         <div class="row-btns"><button id="pMute">Microfone</button><button id="pDeaf">Áudio</button><button class="red" id="pLeave">Sair</button></div>
       </section>
+      <section id="groupBox" hidden>
+        <h2>Discord · grupos</h2>
+        <div class="chips" id="groupChips"></div>
+      </section>
       <section id="musicBox" hidden>
         <h2>Música</h2>
         <div class="np" id="np"><img id="npArt" alt=""><div><strong id="npTitle"></strong><span id="npArtist"></span></div>
@@ -224,12 +228,28 @@
       const r = await api().discord_call();
       const c = r.ok ? r.data.call : null;
       $("callBox").hidden = !c;
-      if (!c) return;
+      $("groupBox").hidden = true;
+      if (!c) { if (r.ok) loadGroups(); return; }
       voice = r.data.voice;
       $("callName").textContent = [c.name, c.guild].filter(Boolean).join(" · ");
       $("callMembers").innerHTML = c.members.map((m) => `<div class="${m.speaking ? "speaking" : ""}" data-user="${esc(m.id)}">
         <img src="${esc(m.avatar)}" alt=""><span>${esc(m.name)}</span>${m.deaf ? "<i>surdo</i>" : m.mute ? "<i>mudo</i>" : ""}</div>`).join("");
       paintVoice();
+    }
+
+    // fora de call: os grupos (com call acontecendo primeiro) para entrar ou ligar sem sair do jogo
+    async function loadGroups() {
+      const r = await api().discord_groups();
+      const groups = r.ok ? r.data.groups.filter((g) => g.type === 3 || g.members.length) : [];
+      groups.sort((a, b) => b.members.length - a.members.length);
+      $("groupBox").hidden = !groups.length;
+      $("groupChips").innerHTML = groups.slice(0, 6).map((g) => `<button data-join="${esc(g.id)}" title="${esc(g.name)}">${g.members.length ? "● " : ""}${esc(g.name)}${g.members.length ? ` (${g.members.length})` : ""}</button>`).join("");
+      $("groupChips").querySelectorAll("[data-join]").forEach((b) => b.addEventListener("click", async () => {
+        b.textContent = "Chamando…";
+        const res = await api().discord_join(b.dataset.join);
+        if (!res.ok) b.textContent = res.error;
+        setTimeout(loadCall, 800);
+      }));
     }
 
     function paintVoice() {

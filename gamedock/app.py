@@ -534,6 +534,22 @@ class Api:
     def discord_call(self) -> dict:
         return self._social.discord_call()
 
+    def discord_groups(self) -> dict:
+        return self._social.discord_do(self._social.discord_groups)
+
+    def discord_enable_groups(self) -> dict:
+        r = self._social.discord_do(self._social.discord_enable_groups)
+        return r["data"] if r.get("ok") else r
+
+    def discord_add_group(self, text: str) -> dict:
+        r = self._social.discord_do(self._social.discord_add_group, str(text or ""))
+        return r["data"] if r.get("ok") else r
+
+    def discord_forget_group(self, channel_id: str) -> dict:
+        from . import discord_rpc
+        discord_rpc.forget_group(str(channel_id))
+        return {"ok": True}
+
     def discord_join(self, channel_id: str) -> dict:
         return self._social.discord_do(self._social.discord.join, str(channel_id))
 

@@ -5,7 +5,7 @@ jogos instalados (Steam, Epic, GOG, Ubisoft, Riot, Google Play Games, jogos solt
 coloca tudo num só lugar e permite **dar play** em qualquer um, com uma interface própria
 no estilo console.
 
-> Status: **v0.6.0**: Discord (calls e voz) e YouTube Music dentro do GameDock. (A v0.5.0 trazia um sistema de downloads, removido na 0.5.1.) Desde a v0.4: backup de saves, atualização automática pelo GitHub, PS1/PS2/NES, Modo Jogo, desafios e
+> Status: **v0.6.1**: Discord (calls e voz) e YouTube Music dentro do GameDock. (A v0.5.0 trazia um sistema de downloads, removido na 0.5.1.) Desde a v0.4: backup de saves, atualização automática pelo GitHub, PS1/PS2/NES, Modo Jogo, desafios e
 > uso completo pelo controle. Código e versões em github.com/luizhenriquevfernandes2008-ops/GameDock.
 > (O projeto se chamava *GameHub* na v0.1; a pasta continua `C:\Users\luizv\GameHub`.)
 
@@ -234,6 +234,12 @@ Jogos precisam ser cópias dos discos do próprio usuário; o GameDock não baix
   volume de cada pessoa. Canais de texto abrem no app do Discord (`discord://`).
 - Alt+G: a call atual com quem está falando e os botões de microfone, áudio e sair.
 - Mensagens (DMs/menções, evento `NOTIFICATION_CREATE`) viram aviso por cima do jogo (opção em Configurações → Discord).
+- **Grupos e DMs** (v0.6.1, primeira entrada da lista, aberta por padrão): o RPC só lista canais de servidor (`GET_CHANNELS` sem
+  `guild_id` devolve todos os canais de servidor, nunca DMs). A lista completa vem da API REST `/users/@me/channels` com o escopo
+  extra `dm_channels.read`, pedido num segundo AUTHORIZE pelo botão "Carregar meus grupos" (pode ser recusado para app não aprovado).
+  Plano B que sempre funciona: grupos lembrados em `discord_groups.json` quando você entra numa call de grupo, quando chega mensagem
+  de um grupo, ou colando o link/ID. Quem está na call de cada grupo vem do `GET_CHANNEL`; `SELECT_VOICE_CHANNEL` entra ou liga.
+  O Alt+G, fora de call, mostra os grupos para entrar/ligar.
 - Limite do Discord: o RPC **não envia mensagens**; mandar mensagem por fora exigiria automatizar a conta (proibido pelos termos).
 - Detalhe técnico: pipe síncrono do Windows faz uma operação por vez; o leitor usa `PeekNamedPipe` antes de ler, senão um `ReadFile`
   parado travaria todo comando. Testado com um Discord falso no pipe (comandos, eventos, PING/PONG).

@@ -120,6 +120,11 @@ class Integrations:
             self._push("onDiscord", {"type": "status", **self.discord_state()})
         elif evt == "NOTIFICATION_CREATE":
             self._discord_notification(data)
+            threading.Thread(target=self._learn_from_message, args=(data,), daemon=True).start()
+        elif evt == "PRIVATE_SEEN":
+            discord_rpc.remember_group(data["id"], type=data.get("type"), name=data.get("name"),
+                                       recipients=[{"id": m["id"], "name": m["name"], "avatar": m["avatar"]}
+                                                   for m in data.get("members", []) if m["id"] != (self.discord.user or {}).get("id")])
 
     def _discord_notification(self, data: dict) -> None:
         config = load_config()
@@ -132,6 +137,78 @@ class Integrations:
                            "game": author.get("global_name") or author.get("username") or "",
                            "icon": _safe_url(data.get("icon_url") or (discord_rpc.avatar_url(author) if author.get("id") else "")),
                            "sound": config.get("sound_enabled", True), "volume": config.get("sound_volume", 0.6)})
+
+    # ------------------------------------------------------------ grupos e DMs
+
+    def _learn_from_message(self, data: dict) -> None:
+        """Mensagem de um grupo/DM: o GameDock passa a mostrar esse grupo (plano B sem a lista automática)."""
+        channel_id = data.get("channel_id")
+        if not channel_id or (data.get("message") or {}).get("guild_id"):
+            return
+        try:
+            info = self.discord.channel_info(str(channel_id))
+        except DiscordError:
+            return
+        if info.get("type") not in (discord_rpc.DM, discord_rpc.GROUP_DM):
+            return
+        author = (data.get("message") or {}).get("author") or {}
+        people = [{"id": author["id"], "name": author.get("global_name") or author.get("username", ""),
+                   "avatar": discord_rpc.avatar_url(author)}] if author.get("id") else []
+        discord_rpc.remember_group(info["id"], type=info["type"], name=info.get("name"), recipients=people)
+
+    def discord_groups(self) -> dict:
+        """Grupos e DMs: a lista inteira (com a permissão extra) ou os lembrados, com quem está na call de cada um."""
+        me = (self.discord.user or {}).get("id")
+        auto = self.discord.has_group_scope()
+        items, error = {}, ""
+        if auto:
+            try:
+                for c in self.discord.private_channels():
+                    items[c["id"]] = c
+            except DiscordError as exc:
+                error = str(exc)
+        for cid, g in discord_rpc.remembered_groups().items():
+            if cid not in items:
+                items[cid] = {"id": cid, "type": g.get("type", discord_rpc.GROUP_DM), "name": g.get("name", ""),
+                              "icon": "", "recipients": g.get("recipients", []), "last": 0, "seen": g.get("last", 0)}
+        # grupos primeiro, depois DMs; os mais recentes em cima
+        groups = sorted(items.values(), key=lambda c: (c["type"] != discord_rpc.GROUP_DM, -(c.get("last") or 0),
+                                                       -(c.get("seen") or 0)))
+        groups = [g for g in groups if g["type"] == discord_rpc.GROUP_DM][:40] + \
+                 [g for g in groups if g["type"] == discord_rpc.DM][:15]
+        current = self.discord.call_channel
+        for g in groups:
+            g["recipients"] = [r for r in g.get("recipients", []) if r.get("id") != me]
+            if not g["name"]:
+                g["name"] = ", ".join(r["name"] for r in g["recipients"][:4]) or "Grupo sem nome"
+            try:
+                g["members"] = self.discord.channel_info(g["id"])["members"]
+                g["ok"] = True
+            except DiscordError:
+                g["members"], g["ok"] = [], False
+            g["here"] = g["id"] == current
+        return {"auto": auto, "error": error, "groups": groups}
+
+    def discord_enable_groups(self) -> dict:
+        try:
+            self.discord.enable_groups()
+            return {"ok": True}
+        except DiscordError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def discord_add_group(self, text: str) -> dict:
+        channel_id = discord_rpc.parse_channel_ref(text)
+        if not channel_id:
+            return {"ok": False, "error": "cole o link do grupo (discord.com/channels/@me/...) ou o ID dele"}
+        try:
+            info = self.discord.channel_info(channel_id)
+        except DiscordError as exc:
+            return {"ok": False, "error": f"o Discord não achou esse grupo ({exc})"}
+        if info.get("type") not in (discord_rpc.DM, discord_rpc.GROUP_DM):
+            return {"ok": False, "error": "esse link é de um canal de servidor, não de um grupo"}
+        discord_rpc.remember_group(channel_id, type=info["type"], name=info.get("name"),
+                                   recipients=[{"id": m["id"], "name": m["name"], "avatar": m["avatar"]} for m in info["members"]])
+        return {"ok": True}
 
     # ------------------------------------------------------------ YouTube Music
 

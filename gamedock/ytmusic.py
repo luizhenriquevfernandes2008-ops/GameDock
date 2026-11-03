@@ -240,16 +240,42 @@ class MusicPlayer:
             self.open(show=True)
             return
         self.visible = True
-        if self.parked:   # estava fora da tela: traz para o meio do monitor principal
-            self.parked = False
-            try:
-                import ctypes
-                sw, sh = ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
-                self.window.move(max(0, (sw - WIDTH) // 2), max(0, (sh - HEIGHT) // 2))
-            except Exception:
-                pass
+        self.parked = False
         self.window.show()
         self.window.restore()
+        self._bring_on_screen()
+
+    def _bring_on_screen(self) -> None:
+        """A janela nasce fora da tela (-32000). O move() do pywebview numa janela escondida não vale e o restore()
+        a devolvia para lá; então, depois de mostrar, ela é posta no meio do monitor do mouse direto pelo Windows."""
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        try:
+            hwnd = int(self.window.native.Handle.ToInt64())
+        except Exception:
+            return
+        if user32.MonitorFromWindow(hwnd, 0):   # 0 = MONITOR_DEFAULTTONULL: já está em algum monitor
+            user32.SetForegroundWindow(hwnd)
+            return
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT),
+                        ("dwFlags", wintypes.DWORD)]
+        pt = wintypes.POINT()
+        user32.GetCursorPos(ctypes.byref(pt))
+        monitor = user32.MonitorFromPoint(pt, 2)   # 2 = MONITOR_DEFAULTTONEAREST
+        info = MONITORINFO()
+        info.cbSize = ctypes.sizeof(MONITORINFO)
+        user32.GetMonitorInfoW(monitor, ctypes.byref(info))
+        work = info.rcWork
+        scale = (user32.GetDpiForWindow(hwnd) or 96) / 96
+        w = min(int(WIDTH * scale), work.right - work.left)
+        h = min(int(HEIGHT * scale), work.bottom - work.top)
+        x = work.left + (work.right - work.left - w) // 2
+        y = work.top + (work.bottom - work.top - h) // 2
+        user32.SetWindowPos(hwnd, 0, x, y, w, h, 0x0004 | 0x0040)   # SWP_NOZORDER | SWP_SHOWWINDOW
+        user32.SetForegroundWindow(hwnd)
 
     def hide(self) -> None:
         if self.window is not None:
