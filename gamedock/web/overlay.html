@@ -86,6 +86,8 @@
       goal: { color: "#2fd18b", label: "Meta da semana", sound: "levelup" },
       break: { color: "#3dd6ff", label: "Hora de uma pausa?", sound: "open" },
       state: { color: "#f4f4f6", label: "Save state", sound: "shutter" },
+      discord: { color: "#5865f2", label: "Discord", sound: "open" },
+      music: { color: "#ff3d5a", label: "Tocando agora", sound: "open" },
     };
 
     function showTrophy(t) {
@@ -102,6 +104,8 @@
       document.getElementById("meta").textContent = [t.game, rarity].filter(Boolean).join(" · ");
       document.getElementById("labelIcon").innerHTML = t.kind === "capture"
         ? '<path d="M4 7h3l2-2.5h6L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3.2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>'
+        : t.kind === "music" ? '<path d="M9 17.5V6l11-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>'
+        : t.kind === "discord" ? '<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4V6a1 1 0 0 1 1-1z"/>'
         : TROPHY_PATH;
       document.getElementById("icon").innerHTML = t.kind === "level" ? `<span class="lvl">${t.level}</span>`
         : t.kind === "break" ? '<span class="lvl">☕</span>' : t.kind === "state" ? '<span class="lvl">💾</span>'

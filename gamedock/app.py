@@ -20,6 +20,7 @@ import webview
 from . import (__version__, achievements, backup, captures, challenges, clips, disk, dualsense, emulators, freegames,
                gameinfo, gamemode, logs, mediaedit, player, quickset, recap, recorder, retroach, saves, sgdb, shell,
                timetobeat, updater)
+from .integrations import Integrations, open_discord_link
 from .art import as_url, clear_memory, custom_cover, get_art, set_custom_cover, shrink_image
 from .launcher import LaunchError, clean_dll_search, launch
 from .live import LiveService, trophies_for_ui
@@ -35,6 +36,7 @@ PREFS = {
     "game_mode": False, "game_mode_quiet": True, "game_mode_reopen": True, "game_mode_close": [],
     "break_reminder": 0,            # minutos (0 = desligado)
     "discord_presence": False, "discord_client_id": "", "discord_webhook": "",
+    "discord_control": False, "discord_notify": True, "music_notify": True,
     "save_auto": True, "save_keep": 10,
     "free_games_notify": True,
     "emu_perf_overlay": False,
@@ -78,6 +80,7 @@ class Api:
         self._window: webview.Window | None = None
         self._live: LiveService | None = None
         self._shell: Shell | None = None
+        self._social = Integrations()
         self._ffmpeg_install: dict = {"running": False}
         self._scan_lock = threading.Lock()
         self._maximized = False
@@ -503,6 +506,97 @@ class Api:
         self.panel_close()
         if self._shell:
             self._shell.show()
+
+    # ------------------------------------------------------------ Discord (calls, voz, servidores)
+
+    def discord_state(self) -> dict:
+        return self._social.discord_state()
+
+    def discord_connect(self) -> dict:
+        config = load_config()
+        if not config.get("discord_control"):
+            config["discord_control"] = True
+            save_config(config)
+        return self._social.discord_connect()
+
+    def discord_logout(self) -> dict:
+        config = load_config()
+        config["discord_control"] = False
+        save_config(config)
+        return self._social.discord_logout()
+
+    def discord_guilds(self) -> dict:
+        return self._social.discord_do(self._social.discord.guilds)
+
+    def discord_channels(self, guild_id: str) -> dict:
+        return self._social.discord_do(self._social.discord.channels, str(guild_id))
+
+    def discord_call(self) -> dict:
+        return self._social.discord_call()
+
+    def discord_join(self, channel_id: str) -> dict:
+        return self._social.discord_do(self._social.discord.join, str(channel_id))
+
+    def discord_leave(self) -> dict:
+        return self._social.discord_do(self._social.discord.leave)
+
+    def discord_voice(self, key: str, value) -> dict:
+        if key not in ("mute", "deaf", "input", "output"):
+            return {"ok": False, "error": "ajuste desconhecido"}
+        return self._social.discord_do(self._social.discord.set_voice, **{key: value})
+
+    def discord_user(self, user_id: str, volume=None, mute=None) -> dict:
+        return self._social.discord_do(self._social.discord.set_user, str(user_id), volume, mute)
+
+    def discord_open_text(self, guild_id: str, channel_id: str) -> dict:
+        try:
+            open_discord_link(guild_id, str(channel_id))
+            return {"ok": True}
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def discord_portal(self) -> None:
+        webbrowser.open(self._social.discord_state()["portal"])
+
+    # ------------------------------------------------------------ YouTube Music
+
+    def music_state(self) -> dict:
+        return self._social.music.state()
+
+    def music_open(self, show: bool = True) -> dict:
+        self._social.music.open(show=bool(show))
+        return {"ok": True}
+
+    def music_hide(self) -> None:
+        self._social.music.hide()
+
+    def music_close(self) -> None:
+        self._social.music.close()
+
+    def music_library(self) -> dict:
+        if not self._social.music.is_open():
+            self._social.music.open(show=False)
+        return self._social.music_call(self._social.music.library)
+
+    def music_search(self, query: str) -> dict:
+        query = (query or "").strip()
+        if not query:
+            return {"ok": True, "data": []}
+        if not self._social.music.is_open():
+            self._social.music.open(show=False)
+        return self._social.music_call(self._social.music.search, query)
+
+    def music_playlists_cached(self) -> dict:
+        if not self._social.music.is_open():
+            return {"ok": True, "data": []}
+        return self._social.music_call(self._social.music.playlists_cached)
+
+    def music_play(self, playlist: str = "", video: str = "") -> dict:
+        self._social.music.play(playlist or "", video or "")
+        return {"ok": True}
+
+    def music_control(self, action: str, value=None) -> dict:
+        return self._social.music.control(action, value)
 
     def get_recording(self) -> dict:
         config = load_config()
@@ -942,6 +1036,8 @@ class Shell:
     def on_closed(self) -> None:
         self.quitting = True
         self.tray.stop()
+        self.api._social.music.close()
+        self.api._social.stop()
         for w in self.extra_windows:
             try:
                 w.destroy()
@@ -1082,6 +1178,29 @@ def start_server() -> int:
     return server.server_address[1]
 
 
+def wait_webview_free(folder: Path, timeout: float = 12.0) -> None:
+    """Espera o WebView2 de uma abertura anterior soltar a pasta de dados.
+
+    Com o login salvo (private_mode=False) a pasta é sempre a mesma; se o GameDock reabre logo depois de fechar
+    (atualização, reinício), os processos msedgewebview2 antigos ainda podem estar saindo e o WebView2 novo falha.
+    """
+    import psutil
+    key = str(folder).lower()
+    end = time.time() + timeout
+    while time.time() < end:
+        busy = False
+        for proc in psutil.process_iter(["name", "cmdline"]):
+            try:
+                if (proc.info["name"] or "").lower() == "msedgewebview2.exe" and key in " ".join(proc.info["cmdline"] or []).lower():
+                    busy = True
+                    break
+            except (psutil.Error, TypeError):
+                continue
+        if not busy:
+            return
+        time.sleep(0.3)
+
+
 def run() -> None:
     if "--uninstall" in sys.argv:
         from . import installer
@@ -1140,6 +1259,7 @@ def run() -> None:
         background_color="#0e0e13",
     )
     api._live = LiveService(api._window, trophy_window, panel_window)
+    api._social.attach([api._window, panel_window], api._live.overlay, lambda: bool(api._live.running()))
     api._shell = Shell(api, api._window, [trophy_window, panel_window], port)
     if start_in_tray:
         api._shell.hidden = api._shell.unloaded = True
@@ -1157,4 +1277,7 @@ def run() -> None:
         if config.get("lightbar_sync"):
             threading.Thread(target=api.sync_lightbar, daemon=True).start()
 
-    webview.start(started, debug=False)
+    # private_mode=False: o login do YouTube Music (cookies do WebView2) fica salvo entre uma abertura e outra
+    storage = data_dir() / "webview"
+    wait_webview_free(storage)
+    webview.start(started, debug=False, private_mode=False, storage_path=str(storage))

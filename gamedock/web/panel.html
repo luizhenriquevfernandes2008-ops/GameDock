@@ -57,6 +57,39 @@
     .nogame { flex: 1; display: grid; place-items: center; text-align: center; padding: 30px; gap: 8px; color: var(--muted); }
     .nogame strong { display: block; color: var(--text); font-size: 18px; margin-bottom: 6px; }
     .msg { font-size: 12px; color: #ffb3b3; }
+    .stack { display: grid; gap: 16px; }
+    .nogame-mini { padding: 14px; border-radius: 14px; background: var(--glass); font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+    .nogame-mini strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 2px; }
+    .call-head { display: flex; align-items: baseline; gap: 8px; }
+    .call-head h2 { margin: 0; color: #2fd18b; }
+    .call-head span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .members { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .members div { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 56px; font-size: 10.5px; color: var(--muted); text-align: center; }
+    .members img { width: 42px; height: 42px; border-radius: 50%; transition: box-shadow .12s; }
+    .members div.speaking img { box-shadow: 0 0 0 2.5px #2fd18b, 0 0 12px #2fd18b99; }
+    .members div.speaking { color: var(--text); }
+    .members span { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .members i { font-style: normal; color: #ff8a8a; }
+    .row-btns { display: flex; gap: 8px; }
+    .row-btns button { flex: 1; height: 38px; border: 0; border-radius: 12px; background: var(--glass); color: var(--text); font: 700 12.5px var(--font); cursor: pointer; }
+    .row-btns button:hover { background: rgb(255 255 255 / .12); }
+    .row-btns button.off { background: #e8112333; color: #ffb3b3; }
+    .row-btns button.red { background: #e8112355; }
+    .np { display: flex; gap: 12px; align-items: center; }
+    .np img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: #1a1a22; flex: none; }
+    .body > * { min-width: 0; }
+    .np > div:not(.np-ctl) { min-width: 0; flex: 1; }
+    .np strong { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .np span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .np-ctl { display: flex; gap: 4px; flex: none !important; }
+    .np-ctl button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: none; color: var(--text); cursor: pointer; display: grid; place-items: center; }
+    .np-ctl button:hover { background: var(--glass); }
+    .np-ctl button.big { background: var(--text); color: #0e0e13; }
+    .np-ctl svg { width: 18px; height: 18px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chips button { max-width: 100%; height: 30px; padding: 0 12px; border: 0; border-radius: 99px; background: var(--glass); color: var(--text);
+                    font: 600 12px var(--font); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chips button:hover { background: rgb(255 255 255 / .14); }
   </style>
 </head>
 <body>
@@ -71,6 +104,21 @@
       </header>
     </div>
     <div class="body" id="body">
+      <div class="nogame-mini" id="noGame" hidden><strong>Nenhum jogo aberto agora</strong>Com um jogo aberto, aqui aparecem a sessão, os troféus e as capturas dele.</div>
+      <section id="callBox" hidden>
+        <div class="call-head"><h2>Na call</h2><span id="callName"></span></div>
+        <div class="members" id="callMembers"></div>
+        <div class="row-btns"><button id="pMute">Microfone</button><button id="pDeaf">Áudio</button><button class="red" id="pLeave">Sair</button></div>
+      </section>
+      <section id="musicBox" hidden>
+        <h2>Música</h2>
+        <div class="np" id="np"><img id="npArt" alt=""><div><strong id="npTitle"></strong><span id="npArtist"></span></div>
+          <div class="np-ctl"><button id="npPrev" title="Anterior"><svg viewBox="0 0 24 24"><path d="M19 6v12l-9-6zM8 6H5.5v12H8z" fill="currentColor"/></svg></button>
+            <button class="big" id="npToggle" title="Tocar / pausar"></button>
+            <button id="npNext" title="Próxima"><svg viewBox="0 0 24 24"><path d="M5 6v12l9-6zM16 6h2.5v12H16z" fill="currentColor"/></svg></button></div></div>
+        <div class="chips" id="npLists"></div>
+      </section>
+      <div class="stack" id="gameOnly">
       <div class="actions">
         <button class="act" id="capture">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 7h3l2-2.5h6L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3.2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
@@ -95,9 +143,7 @@
         <h2>Últimas capturas</h2>
         <div class="shots" id="shots"></div>
       </section>
-    </div>
-    <div class="nogame" id="noGame" hidden>
-      <div><strong>Nenhum jogo aberto agora</strong>O painel mostra a sessão, os troféus e as capturas do jogo que estiver rodando.</div>
+      </div>
     </div>
     <footer class="foot"><span><kbd>Alt</kbd> + <kbd>G</kbd> fecha</span><button id="openApp">Abrir GameDock</button></footer>
   </div>
@@ -120,8 +166,9 @@
       $("msg").hidden = true;
       const d = await api().get_panel();
       const g = d.game;
-      $("withGame").hidden = $("body").hidden = !g;
+      $("withGame").hidden = $("gameOnly").hidden = !g;
       $("noGame").hidden = !!g;
+      loadSocial();
       $("captureKey").textContent = d.captureKey ? `ou ${d.captureKey}` : "";
       $("clip").classList.toggle("off", !d.clipsEnabled);
       $("clipHint").textContent = d.clipsEnabled ? "últimos segundos" : "ligue em Configurações → Clipes";
@@ -157,8 +204,85 @@
 
     function closePanel() {
       clearInterval(timer);
+      clearInterval(musicTimer);
       $("panel").classList.remove("show");
     }
+
+    // ------------------------------------------------ Discord e música
+    const PLAY = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>';
+    const PAUSE = '<svg viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>';
+    let musicTimer = null, voice = { mute: false, deaf: false }, callTimer = null;
+
+    function loadSocial() {
+      loadCall();
+      loadMusic(true);
+      clearInterval(musicTimer);
+      musicTimer = setInterval(() => loadMusic(false), 2000);
+    }
+
+    async function loadCall() {
+      const r = await api().discord_call();
+      const c = r.ok ? r.data.call : null;
+      $("callBox").hidden = !c;
+      if (!c) return;
+      voice = r.data.voice;
+      $("callName").textContent = [c.name, c.guild].filter(Boolean).join(" · ");
+      $("callMembers").innerHTML = c.members.map((m) => `<div class="${m.speaking ? "speaking" : ""}" data-user="${esc(m.id)}">
+        <img src="${esc(m.avatar)}" alt=""><span>${esc(m.name)}</span>${m.deaf ? "<i>surdo</i>" : m.mute ? "<i>mudo</i>" : ""}</div>`).join("");
+      paintVoice();
+    }
+
+    function paintVoice() {
+      $("pMute").textContent = voice.mute ? "Mutado" : "Microfone";
+      $("pDeaf").textContent = voice.deaf ? "Ensurdecido" : "Áudio";
+      $("pMute").classList.toggle("off", voice.mute);
+      $("pDeaf").classList.toggle("off", voice.deaf);
+    }
+
+    async function loadMusic(withLists) {
+      const s = await api().music_state();
+      $("musicBox").hidden = !s.open;
+      if (!s.open) return;
+      $("npArt").src = s.art || "";
+      $("npArt").style.visibility = s.art ? "visible" : "hidden";
+      $("npTitle").textContent = s.title || (s.ready ? "Nada tocando" : "Abrindo…");
+      $("npArtist").textContent = s.title ? [s.artist, s.album].filter(Boolean).join(" · ") : "Escolha uma playlist";
+      $("npToggle").innerHTML = s.playing ? PAUSE : PLAY;
+      if (!withLists) return;
+      const r = await api().music_playlists_cached();
+      const lists = r.ok ? r.data : [];
+      $("npLists").innerHTML = lists.slice(0, 8).map((p) => `<button data-pl="${esc(p.playlist)}" data-v="${esc(p.video)}" title="${esc(p.title)}">${esc(p.title)}</button>`).join("");
+      $("npLists").querySelectorAll("[data-pl]").forEach((b) => b.addEventListener("click", async () => {
+        await api().music_play(b.dataset.pl, b.dataset.v);
+        setTimeout(() => loadMusic(false), 2500);
+      }));
+    }
+
+    async function musicControl(action) {
+      await api().music_control(action, null);
+      loadMusic(false);
+    }
+
+    window.onDiscord = (ev) => {
+      if (!$("panel").classList.contains("show")) return;
+      if (ev.type === "speaking") {
+        document.querySelectorAll(`[data-user="${CSS.escape(ev.user)}"]`).forEach((el) => el.classList.toggle("speaking", ev.on));
+      } else if (ev.type === "voice") {
+        voice = { mute: ev.mute, deaf: ev.deaf };
+        paintVoice();
+      } else if (ev.type === "call" || ev.type === "status") {
+        clearTimeout(callTimer);
+        callTimer = setTimeout(loadCall, 350);
+      }
+    };
+    window.onMusic = () => { if ($("panel").classList.contains("show")) loadMusic(false); };
+
+    $("pMute").addEventListener("click", async () => { const r = await api().discord_voice("mute", !voice.mute); if (r.ok) { voice = r.data; paintVoice(); } });
+    $("pDeaf").addEventListener("click", async () => { const r = await api().discord_voice("deaf", !voice.deaf); if (r.ok) { voice = r.data; paintVoice(); } });
+    $("pLeave").addEventListener("click", async () => { await api().discord_leave(); loadCall(); });
+    $("npToggle").addEventListener("click", () => musicControl("toggle"));
+    $("npNext").addEventListener("click", () => musicControl("next"));
+    $("npPrev").addEventListener("click", () => musicControl("prev"));
 
     $("close").addEventListener("click", () => api().panel_close());
     $("openApp").addEventListener("click", () => api().panel_open_app());

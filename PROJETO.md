@@ -5,7 +5,7 @@ jogos instalados (Steam, Epic, GOG, Ubisoft, Riot, Google Play Games, jogos solt
 coloca tudo num só lugar e permite **dar play** em qualquer um, com uma interface própria
 no estilo console.
 
-> Status: **v0.5.1** (a v0.5.0 trazia um sistema de downloads, removido na 0.5.1). Desde a v0.4: backup de saves, atualização automática pelo GitHub, PS1/PS2/NES, Modo Jogo, desafios e
+> Status: **v0.6.0**: Discord (calls e voz) e YouTube Music dentro do GameDock. (A v0.5.0 trazia um sistema de downloads, removido na 0.5.1.) Desde a v0.4: backup de saves, atualização automática pelo GitHub, PS1/PS2/NES, Modo Jogo, desafios e
 > uso completo pelo controle. Código e versões em github.com/luizhenriquevfernandes2008-ops/GameDock.
 > (O projeto se chamava *GameHub* na v0.1; a pasta continua `C:\Users\luizv\GameHub`.)
 
@@ -67,6 +67,7 @@ ativar a Google Drive API; `npx firebase-tools login` para publicar as regras. E
 | v0.2 | Interface estilo console, cor dinâmica, capas automáticas, `GameDock.exe` | ✅ |
 | v0.3 | App de verdade (instalador, bandeja, instância única), troféus, capturas, clipes, perfil, PS3 | ✅ |
 | **v0.4** | Saves, atualização automática, logs, PS1/PS2/NES + RetroAchievements, Modo Jogo, Alt+G completo, status/anotações/tempo para zerar, desafios, editor de mídia, primeira abertura, controle em tudo | ✅ |
+| v0.6 | Discord integrado (servidores, calls, mutar/ensurdecer, volume por pessoa, mensagens por cima do jogo) e YouTube Music (player, suas playlists, busca, Alt+G) | ✅ |
 | final | Perfis, contas e backup de saves na nuvem | ⏳ |
 
 ---
@@ -219,6 +220,37 @@ Jogos precisam ser cópias dos discos do próprio usuário; o GameDock não baix
 | **Visual** | Temas, fundo animado, música do menu dos jogos de PS3, tamanho do texto, cores para daltônicos, reduzir movimento, Modo Console (liga direto em tela cheia) |
 | **Primeira abertura** | Apresentação guiada (nome, jogos encontrados, emuladores, controle, dicas); de novo em Configurações → Sobre |
 | **Tudo pelo controle** (`web/padnav.js`) | Nas telas com campos o direcional move um destaque, A confirma, B volta; campos de texto abrem um teclado na tela |
+
+### v0.6 — Discord e YouTube Music
+
+**Discord** (`discord_rpc.py`, `integrations.py`, `web/social.js`, tecla **D**, ícone de fone na barra de cima)
+- Usa o **RPC local do próprio Discord** (pipe `\\.\pipe\discord-ipc-N`), o mesmo do "Jogando ...". Não é bot nem login por fora.
+- Login uma vez: `AUTHORIZE` (o Discord mostra o pedido) → código trocado por token com **PKCE, sem segredo** (o app do portal precisa
+  de **Public Client** ligado e `http://localhost` em OAuth2 → Redirects) → `AUTHENTICATE`. Token guardado com a **DPAPI** do Windows
+  (`discord_token.bin` na pasta de dados), renovado sozinho; reconecta sozinho quando o Discord abre.
+- Escopos: `rpc`, `rpc.voice.read`, `rpc.voice.write`, `rpc.notifications.read`, `identify`. Enquanto o app não for aprovado pelo
+  Discord, só o dono e quem estiver em **App Testers** (até 50) consegue autorizar.
+- Página "Calls": servidores, canais de voz com quem está em cada um (anel verde em quem fala), entrar/sair, mutar, ensurdecer,
+  volume de cada pessoa. Canais de texto abrem no app do Discord (`discord://`).
+- Alt+G: a call atual com quem está falando e os botões de microfone, áudio e sair.
+- Mensagens (DMs/menções, evento `NOTIFICATION_CREATE`) viram aviso por cima do jogo (opção em Configurações → Discord).
+- Limite do Discord: o RPC **não envia mensagens**; mandar mensagem por fora exigiria automatizar a conta (proibido pelos termos).
+- Detalhe técnico: pipe síncrono do Windows faz uma operação por vez; o leitor usa `PeekNamedPipe` antes de ler, senão um `ReadFile`
+  parado travaria todo comando. Testado com um Discord falso no pipe (comandos, eventos, PING/PONG).
+
+**YouTube Music** (`ytmusic.py`, tecla **Y**, ícone de nota)
+- Uma janela com o **site oficial** music.youtube.com e a conta da pessoa (Premium vale). Abre só quando usada; nasce fora da tela e
+  se esconde depois de carregar (criar já escondida às vezes nem iniciava o WebView2); o X só esconde, "Parar e fechar" libera a memória.
+- O login fica salvo porque o app agora roda o WebView2 com `private_mode=False` e `storage_path` = pasta `webview` nos dados.
+  Antes cada abertura usava uma pasta temporária nova; agora a pasta é fixa, então `wait_webview_free()` espera um WebView2 de uma
+  abertura anterior soltar a pasta (reinício rápido depois de atualizar).
+- O site usa **Trusted Types**: o `evaluate_js` do pywebview (que usa `eval`) não funciona lá. Os scripts vão direto pelo
+  `ExecuteScript` do WebView2 (`window.gui.evaluate_js`), numa thread com limite de tempo.
+- Playlists, página inicial e busca vêm da API interna do próprio site (`/youtubei/v1/browse` e `search`), chamada de dentro da página
+  com a sessão da pessoa (cabeçalho `SAPISIDHASH`). Tocar = abrir `watch?list=`/`watch?v=`. Controles pelos botões do player.
+- Durante anúncio (conta sem Premium) o título vem do player, não do mediaSession; música nova vira aviso por cima do jogo (opção).
+- Por que não a API oficial: ela não toca música fora do player do YouTube e extrair o áudio quebraria os termos.
+- Possível problema: o Google às vezes bloqueia login dentro de navegadores embutidos ("este navegador pode não ser seguro").
 
 ### Navegação, páginas e perfil
 
