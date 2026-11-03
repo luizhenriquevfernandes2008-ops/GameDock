@@ -35,10 +35,10 @@ def _desktop() -> Path:
     return Path(buf.value)
 
 
-def _shortcut(path: Path, target: Path) -> None:
+def _shortcut(path: Path, target: Path, description: str = "GameDock - todos os seus jogos num só lugar") -> None:
     ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{path}');$s.TargetPath='{target}';"
           f"$s.WorkingDirectory='{target.parent}';$s.IconLocation='{target},0';"
-          "$s.Description='GameDock - todos os seus jogos num só lugar';$s.Save()")
+          f"$s.Description='{description}';$s.Save()")
     subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
                    capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=30)
 
@@ -107,45 +107,156 @@ def silent_update(payload: Path) -> None:
     subprocess.Popen([str(exe)], cwd=str(exe.parent))
 
 
+EXTRA_EMULATORS = (("ps3", "PS3 · RPCS3 + firmware oficial da Sony"), ("ps2", "PS2 · PCSX2"),
+                   ("ps1", "PS1 · DuckStation"), ("nes", "NES · RetroArch"))
+
+
 def setup_main() -> None:
     """Janela do GameDock-Setup.exe."""
     payload = Path(getattr(sys, "_MEIPASS", Path(__file__).parent.parent / "dist")) / "payload"
     if "--silent" in sys.argv:
         return silent_update(payload)
+    import queue
+    import threading
     import tkinter as tk
+    from tkinter import filedialog
+
+    from . import extras
+    from .emulators import EMULATORS
+    from .launcher import clean_dll_search
     bg, fg, muted, accent = "#0c0c10", "#f4f4f6", "#9a9aa6", "#8b7bff"
 
     root = tk.Tk()
     root.title("Instalar GameDock")
-    root.geometry("520x380")
+    root.geometry("560x680")
     root.resizable(False, False)
     root.configure(bg=bg)
     try:
         from PIL import ImageTk
         from .shell import tray_image
-        logo = ImageTk.PhotoImage(tray_image(72))
+        logo = ImageTk.PhotoImage(tray_image(56))
         root.iconphoto(True, ImageTk.PhotoImage(tray_image(32)))
-        tk.Label(root, image=logo, bg=bg).pack(pady=(34, 10))
+        tk.Label(root, image=logo, bg=bg).pack(pady=(24, 6))
     except Exception:
-        tk.Label(root, text="▶", font=("Segoe UI", 40), fg=fg, bg=bg).pack(pady=(30, 4))
+        tk.Label(root, text="▶", font=("Segoe UI", 34), fg=fg, bg=bg).pack(pady=(20, 2))
 
     tk.Label(root, text="GAMEDOCK", font=("Segoe UI Variable Display", 18, "bold"), fg=fg, bg=bg).pack()
     tk.Label(root, text=f"Todos os seus jogos num só lugar · versão {__version__}", font=("Segoe UI", 10),
-             fg=muted, bg=bg).pack(pady=(2, 18))
+             fg=muted, bg=bg).pack(pady=(2, 8))
 
-    desktop = tk.BooleanVar(value=True)
-    autostart = tk.BooleanVar(value=False)
     opts = dict(bg=bg, fg=fg, selectcolor="#1e1e26", activebackground=bg, activeforeground=fg,
                 font=("Segoe UI", 10), anchor="w", highlightthickness=0, bd=0)
-    tk.Checkbutton(root, text="Criar atalho na Área de Trabalho", variable=desktop, **opts).pack(fill="x", padx=110)
-    tk.Checkbutton(root, text="Iniciar com o Windows (na bandeja)", variable=autostart, **opts).pack(fill="x", padx=110, pady=(4, 0))
+
+    def section(title, hint=None):
+        tk.Label(root, text=title.upper(), font=("Segoe UI", 8, "bold"), fg=accent, bg=bg, anchor="w").pack(fill="x", padx=70, pady=(12, 2))
+        if hint:
+            tk.Label(root, text=hint, font=("Segoe UI", 8), fg=muted, bg=bg, anchor="w", justify="left",
+                     wraplength=420).pack(fill="x", padx=70, pady=(0, 2))
+
+    def check(text, value=False):
+        var = tk.BooleanVar(value=value)
+        tk.Checkbutton(root, text=text, variable=var, **opts).pack(fill="x", padx=70)
+        return var
+
+    section("GameDock")
+    desktop = check("Criar atalho na Área de Trabalho", True)
+    autostart = check("Iniciar com o Windows (na bandeja)")
+
+    section("Emuladores (opcional)", "Baixados dos sites oficiais e já configurados com o seu controle. "
+                                     "Os jogos são cópias dos seus próprios discos.")
+    emus = {emu_id: check(label + ("  (já instalado)" if EMULATORS[emu_id].installed() else ""))
+            for emu_id, label in EXTRA_EMULATORS}
+
+    bios_found: dict = {}
+    bios_row = tk.Frame(root, bg=bg)
+    bios_row.pack(fill="x", padx=70, pady=(6, 0))
+    bios_label = tk.Label(bios_row, text="PS1 e PS2 precisam do BIOS copiado do seu console. O GameDock não baixa BIOS.",
+                          font=("Segoe UI", 8), fg=muted, bg=bg, anchor="w", justify="left", wraplength=250)
+
+    def pick_bios():
+        folder = filedialog.askdirectory(title="Pasta onde estão os BIOS do seu PS1/PS2")
+        if not folder:
+            return
+        bios_found.clear()
+        bios_found.update(extras.find_bios(Path(folder)))
+        names = [f"{c.upper()}: {', '.join(p.name for p in files)}" for c, files in bios_found.items() if files]
+        bios_label.config(text="Encontrei " + " · ".join(names) if names else
+                          "Nenhum BIOS nessa pasta (PS1 = 512 KB, PS2 = 4 MB, arquivos .bin/.rom).",
+                          fg=fg if names else "#ff8a8a")
+
+    tk.Button(bios_row, text="Escolher pasta dos BIOS…", command=pick_bios, bg="#1e1e26", fg=fg, activebackground="#2a2a34",
+              activeforeground=fg, font=("Segoe UI", 9), relief="flat", bd=0, padx=10, pady=4, cursor="hand2").pack(side="left")
+    bios_label.pack(side="left", padx=(10, 0), fill="x")
+
+    section("Controle")
+    ds4 = check("DS4Windows · controle de PlayStation no PC" +
+                ("  (já instalado)" if extras.ds4windows_exe().is_file() else ""))
 
     status = tk.Label(root, text=f"Será instalado em {INSTALL_DIR}", font=("Segoe UI", 9), fg=muted, bg=bg, wraplength=460)
-    status.pack(pady=(18, 10))
+    status.pack(pady=(16, 10))
 
-    def log(text):
-        status.config(text=text)
-        root.update()
+    events: queue.Queue = queue.Queue()
+
+    def work(choice):
+        log = lambda text: events.put(("log", text))
+        errors, ds4_exe = [], None
+        try:
+            exe = install(payload, choice["desktop"], choice["autostart"], log)
+        except Exception as exc:
+            events.put(("failed", exc))
+            return
+        for emu_id in choice["emus"]:
+            try:
+                extras.install_emulator(emu_id, log)
+            except Exception as exc:
+                errors.append(f"{EMULATORS[emu_id].name}: {exc}")
+        if choice["bios"]:
+            log("Copiando os BIOS…")
+            try:
+                extras.import_bios(choice["bios"])
+            except Exception as exc:
+                errors.append(f"BIOS: {exc}")
+        if choice["ds4"]:
+            try:
+                ds4_exe = extras.install_ds4windows(log)
+            except Exception as exc:
+                errors.append(f"DS4Windows: {exc}")
+        events.put(("done", exe, errors, ds4_exe))
+
+    def poll():
+        try:
+            while True:
+                event = events.get_nowait()
+                if event[0] == "log":
+                    status.config(text=event[1], fg=muted)
+                elif event[0] == "failed":
+                    status.config(text=f"Não foi possível instalar: {event[1]}", fg="#ff8a8a")
+                    button.config(state="normal", text="Tentar de novo")
+                    return
+                else:
+                    finish(*event[1:])
+                    return
+        except queue.Empty:
+            pass
+        root.after(120, poll)
+
+    def finish(exe, errors, ds4_exe):
+        text = "Pronto!"
+        if ds4_exe:
+            text += " Na primeira vez, o DS4Windows pede para instalar o driver ViGEmBus: aceite."
+        if errors:
+            text = "Instalado, mas alguns extras falharam (dá para tentar de novo em Configurações → Emuladores):\n" + "\n".join(errors)
+        status.config(text=text, fg="#ffb36b" if errors else fg)
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+
+        def open_apps():
+            with clean_dll_search():
+                subprocess.Popen([str(exe)], cwd=str(exe.parent))
+                if ds4_exe:
+                    subprocess.Popen([str(ds4_exe)], cwd=str(ds4_exe.parent))
+            root.destroy()
+
+        button.config(state="normal", text="Abrir GameDock", command=open_apps)
 
     def run_install():
         running = _running_gamedocks()
@@ -156,15 +267,13 @@ def setup_main() -> None:
                 return
             for pid in running:
                 subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=CREATE_NO_WINDOW)
+        choice = {"desktop": desktop.get(), "autostart": autostart.get(),
+                  "emus": [emu_id for emu_id, var in emus.items() if var.get()],
+                  "bios": {c: files for c, files in bios_found.items() if files}, "ds4": ds4.get()}
         button.config(state="disabled", text="Instalando…")
-        try:
-            exe = install(payload, desktop.get(), autostart.get(), log)
-        except Exception as exc:
-            log(f"Não foi possível instalar: {exc}")
-            button.config(state="normal", text="Tentar de novo")
-            return
-        button.config(state="normal", text="Abrir GameDock",
-                      command=lambda: (subprocess.Popen([str(exe)], cwd=str(exe.parent)), root.destroy()))
+        root.protocol("WM_DELETE_WINDOW", lambda: None)   # fechar no meio deixaria a instalação pela metade
+        threading.Thread(target=work, args=(choice,), daemon=True).start()
+        poll()
 
     button = tk.Button(root, text="Instalar", command=run_install, bg=accent, fg="#0a0a0d", activebackground="#a99bff",
                        font=("Segoe UI", 11, "bold"), relief="flat", bd=0, padx=34, pady=8, cursor="hand2")
