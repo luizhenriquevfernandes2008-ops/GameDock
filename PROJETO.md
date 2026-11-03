@@ -16,8 +16,46 @@ no estilo console.
   e que abre jogos no PC. O servidor local já existe; precisaria escutar na rede local com um código de pareamento.
 - **Jogar na TV / no celular**: integração com Sunshine (servidor) + Moonlight (cliente), grátis.
 - **Versão em inglês**: tirar os textos da interface para um arquivo de tradução (pt-BR / en).
-- Fase final: perfis, contas e backup de saves na nuvem (recomendado: Google Drive/OneDrive do próprio usuário;
-  login com Google/Discord em vez de senha; atenção à LGPD se guardar dados de outras pessoas).
+
+### Fase final — contas, social e saves na nuvem (planejado, decidido em 03/11/2026)
+
+Público: poucas pessoas (~3), cada uma no próprio PC com o próprio login.
+
+**Contas e social → Firebase** (Auth + Firestore), plano grátis "Spark", sem cartão.
+- Por que não Supabase: o plano grátis pausa o projeto depois de ~1 semana sem uso. O Firebase não pausa.
+- Login: e-mail e senha (confirmação de e-mail, "esqueci minha senha", troca de e-mail/senha, e-mails em PT-BR enviados
+  pelo próprio Firebase) + "Entrar com Google" (pelo navegador do sistema: o Google bloqueia login dentro de WebView).
+  Discord: dá para adicionar depois com uma função no servidor (exige o plano Blaze).
+- No app: a interface (WebView2) usa o SDK JavaScript do Firebase, guardado localmente (login persistente, Firestore em
+  tempo real). O app só leva a configuração pública (`apiKey`, `projectId`...); quem protege os dados são as
+  **regras de segurança** do Firestore (cada um só escreve nos próprios dados; perfil visível conforme a privacidade).
+  Testar as regras tentando ler/escrever dados de outra conta.
+- Sincronizado: perfil (nome de usuário único, foto, banner, bio, cor, vitrine, nível/XP), troféus, tempo de jogo,
+  estatísticas. O perfil local atual migra para a conta no primeiro login. Sem conta, o GameDock continua funcionando.
+- Social: buscar pessoas, pedido de amizade, perfil dos amigos, **"jogando agora"** ao vivo (com aviso quando um amigo
+  abre um jogo), feed (platinas, troféus raros, jogos zerados), comparar troféus de um jogo, privacidade
+  (público / amigos / privado), bloquear e denunciar.
+- Fotos de perfil/banner: pequenas (redimensionadas no PC, poucos KB), guardadas no próprio Firestore, para não precisar
+  do Cloud Storage (que exige o plano Blaze com cartão).
+- LGPD: política de privacidade + termos (rascunho), botão "apagar minha conta" que apaga tudo de verdade, contato.
+
+**Saves → Google Drive da própria pessoa** (não no Firebase).
+- "Conectar Google Drive" (OAuth no navegador, permissão `drive.file`: o GameDock só enxerga os arquivos que ele mesmo
+  criou). Quem entrou com Google pode conectar na mesma hora; quem usa e-mail e senha conecta à parte.
+- Pasta `GameDock/Saves/<jogo>/` no Drive, com o mesmo zip do backup local de hoje (`saves.py`) + um manifesto
+  (hash, data, nome do PC).
+- **Ao fechar o jogo**: o backup sobe automaticamente (igual ao anterior = não sobe de novo).
+- **Ao abrir o jogo**: se o Drive tiver um save mais novo vindo de **outro PC**, pergunta "Usar o save do PC X de
+  <data>?" antes de o jogo começar. Os dois lados mudaram → mostra os dois (data, PC) e guarda uma cópia do que não for
+  escolhido. Nunca apaga sozinho, nunca sincroniza com o jogo aberto.
+- Histórico das últimas N versões por jogo (restaurar pela página do jogo), também os saves/memory cards dos emuladores.
+- Token do Google guardado criptografado com a DPAPI do Windows.
+- Custo zero para o projeto: o espaço é o da pessoa (15 GB grátis do Google).
+
+**A fazer pelo dono do projeto** (com guia passo a passo): criar o projeto no console do Firebase, ativar Auth
+(e-mail/senha + Google) e Firestore; criar no Google Cloud (mesmo projeto) a credencial OAuth "app para computador" e
+ativar a Google Drive API; `npx firebase-tools login` para publicar as regras. Enquanto o app OAuth estiver em
+"teste", só entram os e-mails cadastrados como testadores (até 100), o que basta para ~3 pessoas.
 
 ---
 
