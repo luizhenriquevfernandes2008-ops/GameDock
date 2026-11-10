@@ -45,6 +45,12 @@ MOD_LOADERS = {
     "reloaded-ii.exe": "--launch",
 }
 
+# launchers de jogos recompilados/portados que atualizam e abrem o jogo (o atalho aponta
+# para o launcher, o jogo mora em outra pasta). Cada um sabe ler onde está o jogo.
+RECOMP_LAUNCHERS = {"nx2navi.exe": "nx2navi"}
+# nomes bonitos para o .exe do jogo (senão usamos o nome do arquivo do dump)
+RECOMP_TITLES = {"ocarina.exe": "The Legend of Zelda: Ocarina of Time"}
+
 # pastas do Menu Iniciar cujos atalhos são todos jogos
 GAME_FOLDERS = {
     "google play games": "google",
@@ -126,6 +132,8 @@ class ShortcutScanner(Scanner):
         source, install_dir = None, None
         game_exe = target
         exe_name = Path(target).name.lower()
+        if exe_name in RECOMP_LAUNCHERS:
+            return self.from_recomp_launcher(path, info, RECOMP_LAUNCHERS[exe_name])
         if exe_name in MOD_LOADERS:
             game_exe = _flag_value(args, MOD_LOADERS[exe_name])
             if not game_exe or not game_exe.lower().endswith(".exe"):
@@ -161,6 +169,28 @@ class ShortcutScanner(Scanner):
             icon=info.get("icon_location") or None,
         )
 
+    def from_recomp_launcher(self, path: Path, info: dict, kind: str) -> Game | None:
+        """Atalho de um launcher de recompilação (ex: NX2navi → Ocarina of Time recompilado).
+        Abrimos pelo launcher (ele atualiza o jogo), mas pasta e .exe são os do jogo: assim o
+        tempo de jogo é contado e a capa é procurada pelo nome certo."""
+        launcher = Path(info["target"])
+        found = recomp_game(launcher, kind)
+        if found is None:
+            return None
+        name, game_dir, game_exe = found
+        return Game(
+            id=f"local:{slug(name)}",
+            name=name,
+            source="local",
+            launch_type="exe",
+            launch_target=str(launcher),
+            launch_args=_split_args(info.get("arguments", "") or ""),
+            working_dir=info.get("working_dir") or str(launcher.parent),
+            install_dir=str(game_dir),
+            exe=str(game_exe),
+            icon=str(game_exe),
+        )
+
     @staticmethod
     def folder_source(path: Path) -> str | None:
         for parent in path.parents:
@@ -182,6 +212,29 @@ def riot_install_dir(game_name: str) -> str | None:
         if wanted in parts:
             # "D:/Riot Games/2XKO/Live/" -> "D:/Riot Games/2XKO"
             return str(Path(*Path(folder).parts[:parts.index(wanted) + 1]))
+    return None
+
+
+def recomp_game(launcher: Path, kind: str) -> tuple[str, Path, Path] | None:
+    """(nome, pasta do jogo, .exe do jogo) de um launcher de recompilação, ou None."""
+    if kind == "nx2navi":
+        # o NX2navi grava em <launcher>\data\launcher.json: {"game_dir": "D:\\Games\\NX2navi", "dump": "...\\Jogo [id][v].nup"}
+        try:
+            config = json.loads((launcher.parent / "data" / "launcher.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        game_dir = Path(config.get("game_dir") or "")
+        if not config.get("game_dir") or not game_dir.is_dir():
+            return None   # ainda não instalou o jogo
+        from .folders import best_executable
+        exes = [p for p in game_dir.glob("*.exe") if p.name.lower() in RECOMP_TITLES]
+        game_exe = exes[0] if exes else best_executable(game_dir)
+        if game_exe is None:
+            return None
+        dump = Path(config.get("dump") or "").stem
+        dump_name = re.sub(r"\s*\[[^\]]*\]", "", dump).strip()   # "Jogo [0400486024dec000][v131072]" -> "Jogo"
+        name = RECOMP_TITLES.get(game_exe.name.lower()) or dump_name or game_dir.name
+        return name, game_dir, game_exe
     return None
 
 
