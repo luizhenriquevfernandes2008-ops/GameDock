@@ -1,6 +1,7 @@
 """Interface gráfica: janela nativa (WebView2) desenhada em HTML/CSS em gamedock/web."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shlex
@@ -19,7 +20,7 @@ import webview
 
 from . import (__version__, achievements, backup, captures, challenges, clips, disk, dualsense, emulators, freegames,
                gameinfo, gamemode, logs, mediaedit, player, quickset, recap, recorder, retroach, saves, sgdb, shell,
-               timetobeat, updater)
+               timetobeat, uninstall, updater)
 from .integrations import Integrations, open_discord_link
 from .art import as_url, clear_memory, custom_cover, get_art, set_custom_cover, shrink_image
 from .launcher import LaunchError, clean_dll_search, launch
@@ -230,6 +231,45 @@ class Api:
         if not picked:
             return {"ok": False, "cancelled": True}
         return disk.move(game_id, picked[0])
+
+    # ------------------------------------------------------------ desinstalar
+
+    def uninstall_plan(self, game_id: str) -> dict:
+        """O que o botão Desinstalar vai fazer (mostrado antes de confirmar)."""
+        game = Library().games.get(game_id)
+        if not game:
+            return {"mode": "none", "text": "Jogo não encontrado."}
+        if self._live and game_id in self._live.running():
+            return {"mode": "none", "text": "Feche o jogo antes de desinstalar."}
+        how = uninstall.plan(game)
+        return {"mode": how["mode"], "text": how["text"]}
+
+    def uninstall_game(self, game_id: str) -> dict:
+        game = Library().games.get(game_id)
+        if not game:
+            return {"ok": False, "error": "Jogo não encontrado."}
+        if self._live and game_id in self._live.running():
+            return {"ok": False, "error": "Feche o jogo antes de desinstalar."}
+        how = uninstall.plan(game)
+        if how["mode"] == "none":
+            return {"ok": False, "error": how["text"]}
+        try:   # o save pode morar dentro da pasta do jogo: guarda uma cópia que não expira
+            saves.backup(game, "uninstall", int(load_config().get("save_keep", saves.KEEP_DEFAULT)))
+        except Exception:
+            logging.getLogger(__name__).exception("backup antes de desinstalar falhou")
+        try:
+            result = uninstall.execute(game, how)
+        except OSError as exc:
+            return {"ok": False, "error": f"Não consegui abrir o desinstalador: {exc}"}
+        if result.get("ok") and result.get("removed"):
+            if how["mode"] == "recycle":
+                with LIBRARY_LOCK:
+                    library = Library()
+                    if (g := library.games.get(game_id)) is not None:
+                        g.installed = False
+                        library.save()
+            self.scan()
+        return result
 
     def get_free_games(self) -> dict:
         return freegames.fetch()

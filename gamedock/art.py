@@ -203,13 +203,19 @@ def wikipedia_cover(game: Game, names: list[str]) -> Path | None:
     if found:
         return found[0]
     missing = folder / "cover-wiki.missing"
+    query = "|".join(names)
     if missing.exists():
-        return None
+        try:
+            # já procurou com estes nomes (marcador antigo, vazio: procurou com game.name)
+            if missing.read_text(encoding="utf-8") in (query, "" if query == game.name else query):
+                return None
+        except OSError:
+            return None
     wanted = {_title_key(n) for n in names if n}
     search = _fetch_json(
         "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=6&srsearch="
         + quote(f"{names[0]} video game"),
-        folder / "wiki-search.json",
+        folder / f"wiki-search-{slug(names[0])}.json",
     ) or {}
     for hit in search.get("query", {}).get("search", []):
         title = hit.get("title", "")
@@ -222,7 +228,7 @@ def wikipedia_cover(game: Game, names: list[str]) -> Path | None:
         if is_game and image.get("source") and image.get("height", 0) > image.get("width", 0):
             url = image["source"].split("?", 1)[0]  # sem parâmetros de rastreio (o servidor recusa bots com eles)
             return _download([url], folder / f"cover-wiki{Path(url).suffix.lower() or '.jpg'}")
-    missing.touch()
+    missing.write_text(query, encoding="utf-8")
     return None
 
 
@@ -235,6 +241,21 @@ def _normalize_title(name: str) -> str:
     return text
 
 
+# etiquetas no fim do nome que não fazem parte do título: "SILENT HILL 3 (Reloaded)",
+# "Jogo [GOG]", "Jogo (2003)", "Jogo (Repack)"
+NAME_TAGS = re.compile(r"\s*(\([^()]*\)|\[[^\[\]]*\])\s*$")
+
+
+def search_name(game: Game) -> str:
+    """Nome usado para procurar arte: o que o usuário deu ao jogo (se renomeou), sem etiquetas."""
+    name = (game.custom_name or game.name or "").strip()
+    previous = None
+    while previous != name:
+        previous = name
+        name = NAME_TAGS.sub("", name).strip()
+    return name or game.name
+
+
 def _title_key(name: str) -> str:
     """Chave de comparação: normalizado e sem espaços ("MoonSweepers" == "Moon Sweepers").
     Números continuam contando: "Lords of Shadow" != "Lords of Shadow 2"."""
@@ -244,11 +265,17 @@ def _title_key(name: str) -> str:
 def steam_store_match(game: Game) -> str | None:
     """Procura o jogo na loja da Steam pelo nome. Só aceita nome idêntico (ignorando pontuação e
     sufixos de edição), para não confundir "Lords of Shadow" com "Lords of Shadow 2"."""
+    name = search_name(game)
     cache = art_dir(game) / "steam-match.json"
     if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL:
-        return json.loads(cache.read_text(encoding="utf-8")).get("appid")
-    wanted = _title_key(game.name)
-    url = f"https://store.steampowered.com/api/storesearch/?term={quote(game.name)}&l=english&cc=US"
+        try:
+            cached = json.loads(cache.read_text(encoding="utf-8"))
+        except ValueError:
+            cached = {}
+        if cached.get("query") == name:   # nome mudou (renomeado / regra nova): busca de novo
+            return cached.get("appid")
+    wanted = _title_key(name)
+    url = f"https://store.steampowered.com/api/storesearch/?term={quote(name)}&l=english&cc=US"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -256,7 +283,7 @@ def steam_store_match(game: Game) -> str | None:
     except (OSError, ValueError):
         return None  # sem internet: tenta de novo na próxima vez
     appid = next((str(i["id"]) for i in items if _title_key(i.get("name", "")) == wanted), None)
-    cache.write_text(json.dumps({"appid": appid, "query": game.name}), encoding="utf-8")
+    cache.write_text(json.dumps({"appid": appid, "query": name}), encoding="utf-8")
     return appid
 
 
@@ -445,7 +472,7 @@ def get_art(game: Game) -> dict:
     official_cover = bool(paths["cover"]) and not product
     wanted = {k for k in ("hero", "logo") if not paths[k]} | (set() if official_cover else {"cover"})
     if key and wanted:
-        urls = sgdb.art_urls(game.name, appid, key, art_dir(game), _title_key, wanted)
+        urls = sgdb.art_urls(search_name(game), appid, key, art_dir(game), _title_key, wanted)
         for kind, url in urls.items():
             if path := _tracked_download(url, art_dir(game) / f"sgdb-{kind}{Path(url).suffix.lower()}"):
                 paths[kind] = shrink_image(path) if kind == "hero" and path.stat().st_size > MAX_HERO_BYTES else path
@@ -460,7 +487,7 @@ def get_art(game: Game) -> dict:
         paths["hero"] = paths["hero"] or found.get("hero")
     if not paths["cover"] and not product:
         # sem capa de biblioteca: capa da caixa (Wikipedia) > capa automática da Steam
-        paths["cover"] = wikipedia_cover(game, [game.name]) or (
+        paths["cover"] = wikipedia_cover(game, [search_name(game)]) or (
             _download([auto_cover], art_dir(game) / "steam-portrait.png") if auto_cover else None)
     # capa escolhida pelo usuário (página do jogo → Trocar capa) vence tudo
     if custom := custom_cover(game):

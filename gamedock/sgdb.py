@@ -7,6 +7,7 @@ quem baixa e guarda em cache é o art.py.
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -70,7 +71,9 @@ def game_id(name: str, steam_appid: str | None, key: str, folder: Path, normaliz
         data = _cached(f"games/steam/{steam_appid}", key, folder / "sgdb-game.json") or {}
         if data.get("success") and data.get("data"):
             return data["data"]["id"]
-    data = _cached(f"search/autocomplete/{quote(name)}", key, folder / "sgdb-search.json") or {}
+    # cache por nome: se o nome buscado mudar, a busca antiga (que não achou nada) não vale mais
+    search_cache = folder / f"sgdb-search-{re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')}.json"
+    data = _cached(f"search/autocomplete/{quote(name)}", key, search_cache) or {}
     wanted = normalize(name)
     return next((g["id"] for g in data.get("data") or [] if normalize(g.get("name", "")) == wanted), None)
 

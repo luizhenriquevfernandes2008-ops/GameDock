@@ -225,6 +225,7 @@ async function loadGamePageExtras(game) {
   $("gpNotesSaved").textContent = "";
   $("gpBeat").innerHTML = `<p class="shots-empty">…</p>`;
   $("gpEnhBlock").hidden = true;
+  resetUninstallButton();
   $("gpDisk").textContent = "";
   const details = await api().get_game_details(id);
   if (state.pageGame !== id) return;
@@ -334,7 +335,7 @@ function backupList(backups) {
   if (!backups?.length) return `<p class="settings-hint" style="margin-top:10px">Nenhum backup ainda.</p>`;
   return `<div class="backups">${backups.slice(0, 8).map((b) => `
     <div class="backup"><span><b>${b.at ? fmtDate(b.at) + " " + new Date(b.at * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : esc(b.name)}</b>
-      ${b.reason === "auto" ? "automático" : b.reason === "restore" ? "antes de restaurar" : "manual"} · ${b.files} arq. · ${fmtBytes(b.size)}</span>
+      ${b.reason === "auto" ? "automático" : b.reason === "restore" ? "antes de restaurar" : b.reason === "uninstall" ? "antes de desinstalar" : "manual"} · ${b.files} arq. · ${fmtBytes(b.size)}</span>
       <button class="ghost-btn" data-restore="${esc(b.name)}">Restaurar</button></div>`).join("")}</div>`;
 }
 
@@ -350,6 +351,57 @@ async function renderDisk(id, again = 0) {
        ${drive ? `<span class="disk-bar"><i style="width:${(1 - drive.free / drive.total) * 100}%"></i></span><span>${fmtBytes(drive.free)} livres</span>` : ""}
        ${t?.error ? `<span class="error">Não deu para mover: ${esc(t.error)}</span>` : ""}`;
   if ((d.size == null || t?.running) && again < 120) setTimeout(() => renderDisk(id, again + 1), t?.running ? 800 : 1500);
+}
+
+// desinstalar: 1º clique mostra o que vai acontecer, 2º clique (em até 8 s) confirma
+let uninstallTimer = null;
+function resetUninstallButton() {
+  const b = $("gpUninstall");
+  clearTimeout(uninstallTimer);
+  if (b.dataset.busy === "1") return;
+  b.dataset.armed = "";
+  b.textContent = "Desinstalar…";
+  b.disabled = false;
+  $("gpUninstallNote").hidden = true;
+}
+
+async function uninstallGame() {
+  const b = $("gpUninstall");
+  const id = state.pageGame;
+  const game = state.all.find((g) => g.id === id);
+  const name = game?.name || "Jogo";
+  if (b.dataset.busy === "1") return;
+  if (b.dataset.armed !== "1") {
+    const plan = await api().uninstall_plan(id);
+    $("gpUninstallNote").textContent = plan.text;
+    $("gpUninstallNote").hidden = false;
+    if (plan.mode === "none") { Sfx.play("error"); return; }
+    b.dataset.armed = "1";
+    b.textContent = `Confirmar: desinstalar ${name}`;
+    Sfx.play("move");
+    clearTimeout(uninstallTimer);
+    uninstallTimer = setTimeout(resetUninstallButton, 8000);
+    return;
+  }
+  clearTimeout(uninstallTimer);
+  b.dataset.armed = "";
+  b.dataset.busy = "1";
+  b.disabled = true;
+  b.textContent = "Desinstalando…";
+  toast(`Desinstalando ${name}… os saves foram copiados antes.`);
+  let r;
+  try {
+    r = await api().uninstall_game(id);
+  } finally {
+    b.dataset.busy = "";
+    resetUninstallButton();
+  }
+  if (!r.ok) { toast(r.error, true); Sfx.play("error"); return; }
+  if (!r.removed) { toast(`${name} continua instalado (o desinstalador foi cancelado ou ainda não terminou).`); return; }
+  Sfx.play("success");
+  toast(`${name} foi desinstalado.`);
+  if (state.pageGame === id && $("gamePage").classList.contains("show")) hidePage("gamePage", "gamePage");
+  await loadGames();
 }
 
 async function moveGame() {
@@ -779,6 +831,7 @@ function bindFeatures() {
   $("randomPlay").addEventListener("click", playRandom);
   $("freeBtn").addEventListener("click", openFreeGames);
   $("gpMove").addEventListener("click", moveGame);
+  $("gpUninstall").addEventListener("click", uninstallGame);
   $("gpSavesFolder").addEventListener("click", () => api().open_saves_folder(state.pageGame));
   $("savesOpen").addEventListener("click", () => api().open_saves_folder(null));
   $("igdbSave").addEventListener("click", saveIgdb);

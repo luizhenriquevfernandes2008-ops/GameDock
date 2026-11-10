@@ -1,3 +1,3 @@
-"""GameDock — biblioteca unificada de jogos para Windows."""
+"""GameDock â€” biblioteca unificada de jogos para Windows."""
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"

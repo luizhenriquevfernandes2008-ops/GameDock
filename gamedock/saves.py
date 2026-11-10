@@ -312,6 +312,10 @@ def list_backups(game: Game) -> list[dict]:
     return result
 
 
+# backups feitos antes de algo arriscado: ficam fora da rotação (nunca são apagados sozinhos)
+PROTECTED_SUFFIX = {"restore": "-antes-de-restaurar", "uninstall": "-antes-de-desinstalar"}
+
+
 def backup(game: Game, reason: str = "manual", keep: int = KEEP_DEFAULT) -> dict:
     loc = locations(game)
     files = _files(loc["paths"])
@@ -329,7 +333,7 @@ def backup(game: Game, reason: str = "manual", keep: int = KEEP_DEFAULT) -> dict
                     return {"ok": True, "skipped": True, "path": str(folder / previous[0]["name"])}
         except (OSError, KeyError, ValueError, zipfile.BadZipFile):
             pass
-    dest = folder / f"{datetime.now():%Y-%m-%d_%H-%M-%S}{'-antes-de-restaurar' if reason == 'restore' else ''}.zip"
+    dest = folder / f"{datetime.now():%Y-%m-%d_%H-%M-%S}{PROTECTED_SUFFIX.get(reason, '')}.zip"
     meta = {"game": game.id, "name": game.display_name, "at": int(time.time()), "reason": reason, "count": len(files),
             "fingerprint": fingerprint, "files": {}, "registry": []}
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -349,7 +353,7 @@ def backup(game: Game, reason: str = "manual", keep: int = KEEP_DEFAULT) -> dict
                 reg.unlink()
         zf.writestr("gamedock-save.json", json.dumps(meta, ensure_ascii=False, indent=1))
     for old in list_backups(game)[max(1, keep):]:
-        if "antes-de-restaurar" not in old["name"]:
+        if not any(suffix in old["name"] for suffix in PROTECTED_SUFFIX.values()):
             (folder / old["name"]).unlink(missing_ok=True)
     return {"ok": True, "path": str(dest), "files": len(meta["files"])}
 
