@@ -538,13 +538,13 @@ async function saveKey(e) {
 }
 
 let toastTimer;
-function toast(message, error = false) {
+function toast(message, error = false, ms = 3200) {
   const el = $("toast");
   el.textContent = message;
   el.classList.toggle("error", error);
   el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 3200);
+  toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
 
 function tickClock() {

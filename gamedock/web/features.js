@@ -225,7 +225,6 @@ async function loadGamePageExtras(game) {
   $("gpNotesSaved").textContent = "";
   $("gpBeat").innerHTML = `<p class="shots-empty">…</p>`;
   $("gpEnhBlock").hidden = true;
-  resetUninstallButton();
   $("gpDisk").textContent = "";
   const details = await api().get_game_details(id);
   if (state.pageGame !== id) return;
@@ -353,31 +352,36 @@ async function renderDisk(id, again = 0) {
   if ((d.size == null || t?.running) && again < 120) setTimeout(() => renderDisk(id, again + 1), t?.running ? 800 : 1500);
 }
 
-// desinstalar: 1º clique mostra o que vai acontecer, 2º clique (em até 8 s) confirma
+// desinstalar (tela inicial, botão da lixeira): 1º clique mostra o que vai acontecer,
+// 2º clique (em até 8 s, no mesmo jogo) confirma. Trocar de jogo desarma.
 let uninstallTimer = null;
+let uninstallArmedFor = null;
 function resetUninstallButton() {
-  const b = $("gpUninstall");
+  const b = $("uninstallBtn");
   clearTimeout(uninstallTimer);
+  uninstallArmedFor = null;
   if (b.dataset.busy === "1") return;
   b.dataset.armed = "";
-  b.textContent = "Desinstalar…";
-  b.disabled = false;
-  $("gpUninstallNote").hidden = true;
+  b.querySelector("span").textContent = "Confirmar desinstalação";
 }
 
+const _showHeroUninstall = showHero;
+showHero = function (game) {
+  if (uninstallArmedFor && uninstallArmedFor !== game?.id) resetUninstallButton();
+  return _showHeroUninstall(game);
+};
+
 async function uninstallGame() {
-  const b = $("gpUninstall");
-  const id = state.pageGame;
-  const game = state.all.find((g) => g.id === id);
-  const name = game?.name || "Jogo";
-  if (b.dataset.busy === "1") return;
-  if (b.dataset.armed !== "1") {
+  const b = $("uninstallBtn");
+  const game = current();
+  if (!game || b.dataset.busy === "1") return;
+  const { id, name } = game;
+  if (b.dataset.armed !== "1" || uninstallArmedFor !== id) {
     const plan = await api().uninstall_plan(id);
-    $("gpUninstallNote").textContent = plan.text;
-    $("gpUninstallNote").hidden = false;
-    if (plan.mode === "none") { Sfx.play("error"); return; }
+    if (plan.mode === "none") { toast(plan.text, true, 6000); Sfx.play("error"); return; }
+    toast(`${name}: ${plan.text}`, false, 8000);
     b.dataset.armed = "1";
-    b.textContent = `Confirmar: desinstalar ${name}`;
+    uninstallArmedFor = id;
     Sfx.play("move");
     clearTimeout(uninstallTimer);
     uninstallTimer = setTimeout(resetUninstallButton, 8000);
@@ -386,9 +390,8 @@ async function uninstallGame() {
   clearTimeout(uninstallTimer);
   b.dataset.armed = "";
   b.dataset.busy = "1";
-  b.disabled = true;
-  b.textContent = "Desinstalando…";
-  toast(`Desinstalando ${name}… os saves foram copiados antes.`);
+  b.querySelector("span").textContent = "Desinstalando…";
+  toast(`Desinstalando ${name}… os saves foram copiados antes.`, false, 6000);
   let r;
   try {
     r = await api().uninstall_game(id);
@@ -396,11 +399,10 @@ async function uninstallGame() {
     b.dataset.busy = "";
     resetUninstallButton();
   }
-  if (!r.ok) { toast(r.error, true); Sfx.play("error"); return; }
-  if (!r.removed) { toast(`${name} continua instalado (o desinstalador foi cancelado ou ainda não terminou).`); return; }
+  if (!r.ok) { toast(r.error, true, 6000); Sfx.play("error"); return; }
+  if (!r.removed) { toast(`${name} continua instalado (o desinstalador foi cancelado ou ainda não terminou).`, false, 6000); return; }
   Sfx.play("success");
   toast(`${name} foi desinstalado.`);
-  if (state.pageGame === id && $("gamePage").classList.contains("show")) hidePage("gamePage", "gamePage");
   await loadGames();
 }
 
@@ -831,7 +833,7 @@ function bindFeatures() {
   $("randomPlay").addEventListener("click", playRandom);
   $("freeBtn").addEventListener("click", openFreeGames);
   $("gpMove").addEventListener("click", moveGame);
-  $("gpUninstall").addEventListener("click", uninstallGame);
+  $("uninstallBtn").addEventListener("click", uninstallGame);
   $("gpSavesFolder").addEventListener("click", () => api().open_saves_folder(state.pageGame));
   $("savesOpen").addEventListener("click", () => api().open_saves_folder(null));
   $("igdbSave").addEventListener("click", saveIgdb);
