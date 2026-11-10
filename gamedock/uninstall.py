@@ -157,6 +157,30 @@ def _game_folder(game: Game) -> Path | None:
     return None
 
 
+def _recomp_launcher_dir(game: Game) -> Path | None:
+    """Pasta do launcher de recompilação (NX2navi...) quando o jogo é aberto por ele."""
+    from .scanners.shortcuts import RECOMP_LAUNCHERS
+    target = Path(game.launch_target or "")
+    if target.name.lower() in RECOMP_LAUNCHERS and target.is_file():
+        return target.parent
+    return None
+
+
+def remove_empty_dirs(folder: Path) -> None:
+    """Apaga `folder` e as pastas acima dela enquanto estiverem vazias (nunca pastas protegidas,
+    de biblioteca ou raiz de disco). Só pastas vazias: os.rmdir falha se tiver qualquer coisa."""
+    protected = _protected()
+    while folder.exists() and len(folder.parts) >= 2 and folder.parent != folder:
+        key = _norm(folder)
+        if key in protected or folder.name.lower() in LIBRARY_NAMES:
+            return
+        try:
+            os.rmdir(folder)
+        except OSError:
+            return
+        folder = folder.parent
+
+
 def _shortcuts_to(paths: list[Path]) -> list[Path]:
     """Atalhos da Área de Trabalho / Menu Iniciar que abrem algo dentro de `paths`."""
     roots = [_norm(p) for p in paths]
@@ -185,6 +209,9 @@ def plan(game: Game) -> dict:
                     "battlenet": "Battle.net", "google": "Google Play Games", "riot": "Riot Client"}.get(game.source, game.source)
         return {"mode": "none", "text": f"Esse jogo é do {launcher}: desinstale por lá."}
     paths = _emulated_files(game) if game.source in EMULATED else [p for p in [_game_folder(game)] if p]
+    launcher = _recomp_launcher_dir(game)
+    if launcher and paths and not _unsafe_reason(launcher, game):
+        paths.append(launcher)   # o launcher (ex: NX2navi) só serve para este jogo: vai junto
     if not paths:
         return {"mode": "none", "text": "Os arquivos do jogo não estão mais no disco."}
     for path in paths:
@@ -193,7 +220,10 @@ def plan(game: Game) -> dict:
     from . import disk
     size = sum(disk._size(p) for p in paths)
     links = _shortcuts_to(paths)
-    where = str(paths[0]) + (f" (+{len(paths) - 1} arquivo(s))" if len(paths) > 1 else "")
+    others = [p for p in paths[1:] if p != launcher]
+    where = str(paths[0]) + (f" (+{len(others)} arquivo(s))" if others else "")
+    if launcher in paths:
+        where += f" e o launcher {launcher.name}"
     extra = f" e {len(links)} atalho(s)" if links else ""
     return {"mode": "recycle", "paths": [str(p) for p in paths], "shortcuts": [str(l) for l in links], "size": size,
             "text": f"Vai mandar para a Lixeira {where} — {_fmt_size(size)}{extra}. Dá para restaurar pela Lixeira."}
@@ -279,10 +309,15 @@ def execute(game: Game, how: dict) -> dict:
         return {"ok": True, "removed": wait_gone(game)}
     if mode == "uninstaller":
         _run_uninstaller(how["command"])
-        return {"ok": True, "removed": wait_gone(game, key=how.get("key"))}
+        removed = wait_gone(game, key=how.get("key"))
+        if removed and game.install_dir:
+            remove_empty_dirs(Path(game.install_dir))   # desinstaladores costumam deixar a pasta vazia
+        return {"ok": True, "removed": removed}
     if mode == "recycle":
         if not recycle(how["paths"]):
             return {"ok": False, "error": "A exclusão foi cancelada ou não terminou."}
         recycle([s for s in how.get("shortcuts", []) if Path(s).exists()])
+        for path in how["paths"]:
+            remove_empty_dirs(Path(path).parent)   # ex: D:\Moon Sweepers ficaria vazia
         return {"ok": True, "removed": True}
     return {"ok": False, "error": how.get("text") or "Não sei desinstalar esse jogo."}

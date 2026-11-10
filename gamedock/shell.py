@@ -11,6 +11,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import secrets
 import sys
 import urllib.request
 import winreg
@@ -23,9 +24,14 @@ ERROR_ALREADY_EXISTS = 183
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "GameDock"
 SHOW_PATH = "/__gamedock/show"
+QUIT_PATH = "/__gamedock/quit"
 
 kernel32 = ctypes.windll.kernel32
 kernel32.CreateMutexW.restype = ctypes.c_void_p
+kernel32.OpenProcess.restype = ctypes.c_void_p
+kernel32.OpenProcess.argtypes = (ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong)
+kernel32.WaitForSingleObject.argtypes = (ctypes.c_void_p, ctypes.c_ulong)
+kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
 _mutex = None
 
 
@@ -42,8 +48,46 @@ def _instance_file() -> Path:
     return data_dir() / "instance.json"
 
 
+_token = secrets.token_hex(16)
+
+
 def publish_instance(port: int) -> None:
-    _instance_file().write_text(json.dumps({"port": port, "pid": os.getpid()}), encoding="utf-8")
+    _instance_file().write_text(json.dumps({"port": port, "pid": os.getpid(), "token": _token}), encoding="utf-8")
+
+
+def valid_token(path: str) -> bool:
+    from urllib.parse import parse_qs, urlsplit
+    sent = parse_qs(urlsplit(path).query).get("token", [""])[0]
+    return secrets.compare_digest(sent, _token)
+
+
+def request_quit(timeout: float = 25) -> bool:
+    """Pede ao GameDock aberto para fechar normalmente (salva tempo de jogo, janela...) e espera
+    o processo sair. False se não havia como pedir ou ele não fechou a tempo."""
+    import time
+    try:
+        info = json.loads(_instance_file().read_text(encoding="utf-8"))
+        urllib.request.urlopen(f"http://127.0.0.1:{info['port']}{QUIT_PATH}?token={info['token']}", timeout=5).read()
+    except (OSError, ValueError, KeyError):
+        return False
+    pid = int(info.get("pid") or 0)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.3)
+    return False
+
+
+def _pid_alive(pid: int) -> bool:
+    SYNCHRONIZE, WAIT_TIMEOUT = 0x00100000, 0x102
+    handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+    if not handle:
+        return False
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == WAIT_TIMEOUT
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def wake_existing_instance() -> bool:

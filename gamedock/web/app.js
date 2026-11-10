@@ -662,6 +662,7 @@ function handleInput(key, e) {
     e: () => switchTab(1),
     Menu: openSettings,
     F11: () => api().toggle_fullscreen(),
+    Delete: () => !e?.repeat && window.startUninstallHold?.(e ? "key" : "pad"),
   };
   const action = actions[key] || actions[lower];
   if (action) { e?.preventDefault(); action(); }
@@ -677,16 +678,16 @@ function renderHints(gamepad) {
     html = extra + (gamepad ? k("B", "Voltar", "pad b") : k("Esc", "Voltar"));
   } else if (gamepad) {
     html = k("◀▶", "Navegar") + k("A", "Jogar", "pad a") + k("▼", "Detalhes") + k("X", "Troféus", "pad x") +
-           k("Y", "Favoritar", "pad y") + k("LB RB", "Abas") + k("View", "Perfil");
+           k("Y", "Favoritar", "pad y") + k("LB RB", "Abas") + k("View", "Perfil") + k("LT", "Desinstalar (segure)");
   } else {
     html = k("←→", "Navegar") + k("Enter", "Jogar") + k("↓", "Detalhes") + k("T", "Troféus") + k("G", "Capturas") +
-           k("P", "Perfil") + k("Q E", "Abas") + k("Ctrl F", "Buscar") + k("M", "Sons");
+           k("P", "Perfil") + k("Q E", "Abas") + k("Ctrl F", "Buscar") + k("M", "Sons") + k("Del", "Desinstalar (segure)");
   }
   $("hints").innerHTML = html;
 }
 
 // Controle (Xbox/PlayStation via Gamepad API): cada botão vira uma "tecla" e passa pelo handleInput.
-const PAD_BUTTONS = { 0: "Enter", 1: "Escape", 2: "t", 3: "f", 4: "q", 5: "e", 8: "p", 9: "Menu",
+const PAD_BUTTONS = { 0: "Enter", 1: "Escape", 2: "t", 3: "f", 4: "q", 5: "e", 6: "Delete", 8: "p", 9: "Menu",
                       12: "ArrowUp", 13: "ArrowDown", 14: "ArrowLeft", 15: "ArrowRight" };
 const REPEATS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 const pad = { held: new Set(), nextRepeat: 0 };

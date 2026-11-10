@@ -1,6 +1,7 @@
 """Interface gráfica: janela nativa (WebView2) desenhada em HTML/CSS em gamedock/web."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -20,7 +21,7 @@ import webview
 
 from . import (__version__, achievements, backup, captures, challenges, clips, disk, dualsense, emulators, freegames,
                gameinfo, gamemode, logs, mediaedit, player, quickset, recap, recorder, retroach, saves, sgdb, shell,
-               timetobeat, uninstall, updater)
+               libtools, timetobeat, uninstall, updater)
 from .integrations import Integrations, open_discord_link
 from .art import as_url, clear_memory, custom_cover, get_art, set_custom_cover, shrink_image
 from .launcher import LaunchError, clean_dll_search, launch
@@ -69,6 +70,57 @@ def _seconds_per_day(sessions: list[dict], days: int) -> list[dict]:
                 totals[start.date()] += int((chunk_end - start).total_seconds())
             start = chunk_end
     return [{"date": d.isoformat(), "seconds": sec} for d, sec in totals.items()]
+
+
+class ShortcutWatcher(threading.Thread):
+    """Atalho novo (ou apagado) na Área de Trabalho / Menu Iniciar / pastas de jogos: escaneia
+    sozinho e avisa a interface. Olha só a data de modificação das pastas (barato), a cada 10 s,
+    e espera a mudança assentar (instaladores criam vários atalhos em sequência)."""
+
+    EVERY = 10
+
+    def __init__(self, api: "Api"):
+        super().__init__(daemon=True, name="shortcut-watch")
+        self.api = api
+
+    @staticmethod
+    def signature() -> tuple:
+        from .scanners.shortcuts import shortcut_dirs
+        roots = [*shortcut_dirs(), *(Path(f) for f in load_config().get("scan_folders", []))]
+        marks = []
+        for root in roots:
+            if not root.is_dir():
+                continue
+            marks.append((str(root), root.stat().st_mtime_ns))
+            if root.name.lower() == "programs":   # Menu Iniciar: atalhos ficam em subpastas
+                for sub in root.rglob("*"):
+                    try:
+                        if sub.is_dir():
+                            marks.append((str(sub), sub.stat().st_mtime_ns))
+                    except OSError:
+                        pass
+        return tuple(sorted(marks))
+
+    def run(self) -> None:
+        last = self.signature()
+        pending = None
+        while True:
+            time.sleep(self.EVERY)
+            try:
+                now = self.signature()
+                if now == last:
+                    pending = None
+                    continue
+                if pending != now:      # mudou: espera mais uma volta sem mudança
+                    pending = now
+                    continue
+                last, pending = now, None
+                report = self.api.scan()
+                if report.get("new") or report.get("missing"):
+                    payload = json.dumps(report)
+                    self.api._window.evaluate_js(f"window.onLibraryChanged && window.onLibraryChanged({payload})")
+            except Exception:
+                logging.getLogger(__name__).exception("vigia de atalhos")
 
 
 class Api:
@@ -231,6 +283,74 @@ class Api:
         if not picked:
             return {"ok": False, "cancelled": True}
         return disk.move(game_id, picked[0])
+
+    # ------------------------------------------------------------ biblioteca (Configurações)
+
+    def library_settings(self) -> dict:
+        return {"folders": libtools.scan_folders(), "suggestions": libtools.folder_suggestions(),
+                "candidates": libtools.candidates(), "missing": len(libtools.missing_games())}
+
+    def _rescan_and_settings(self) -> dict:
+        report = self.scan()
+        return {**self.library_settings(), "report": report}
+
+    def pick_scan_folder(self) -> dict | None:
+        picked = self._window.create_file_dialog(webview.FileDialog.FOLDER)
+        if not picked:
+            return None
+        libtools.add_scan_folder(picked[0])
+        return self._rescan_and_settings()
+
+    def add_scan_folder(self, folder: str) -> dict:
+        libtools.add_scan_folder(folder)
+        return self._rescan_and_settings()
+
+    def remove_scan_folder(self, folder: str) -> dict:
+        libtools.remove_scan_folder(folder)
+        return self._rescan_and_settings()
+
+    def dismiss_folder_suggestion(self, folder: str) -> dict:
+        libtools.dismiss_suggestion(folder)
+        return self.library_settings()
+
+    def decide_candidate(self, exe: str, is_game: bool) -> dict:
+        libtools.decide_candidate(exe, bool(is_game))
+        return self._rescan_and_settings() if is_game else self.library_settings()
+
+    def purge_missing(self) -> dict:
+        return {"removed": libtools.purge_missing(), **self.library_settings()}
+
+    def storage_overview(self) -> dict:
+        return libtools.storage_overview()
+
+    def cover_options(self, game_id: str) -> list[dict]:
+        game = Library().games.get(game_id)
+        return libtools.cover_options(game) if game else []
+
+    def set_cover_url(self, game_id: str, url: str) -> dict | None:
+        game = Library().games.get(game_id)
+        if not game or not libtools.set_cover_from_url(game, url):
+            return None
+        return get_art(game)
+
+    # ------------------------------------------------------------ ouvir junto (Discord + YouTube Music)
+
+    def listen_state(self) -> dict:
+        return self._social.listen.state()
+
+    def listen_host(self) -> dict:
+        return self._social.listen.start_hosting()
+
+    def listen_stop(self) -> dict:
+        self._social.listen.stop_hosting()
+        return self._social.listen.state()
+
+    def listen_follow(self, host_id: str) -> dict:
+        return self._social.listen.follow(host_id)
+
+    def listen_unfollow(self) -> dict:
+        self._social.listen.unfollow()
+        return self._social.listen.state()
 
     # ------------------------------------------------------------ desinstalar
 
@@ -1091,6 +1211,11 @@ class Shell:
 
     def on_closed(self) -> None:
         self.quitting = True
+        if self.api._live:
+            try:   # guarda o tempo de jogo e as sessões abertas antes de sair
+                self.api._live.monitor.stop()
+            except Exception:
+                logging.getLogger(__name__).exception("salvar tempo de jogo ao sair")
         self.tray.stop()
         self.api._social.music.close()
         self.api._social.stop()
@@ -1152,6 +1277,7 @@ class _LocalFiles(SimpleHTTPRequestHandler):
                       ".css": "text/css", ".svg": "image/svg+xml", ".ico": "image/x-icon"}
 
     on_show = None  # chamado quando uma segunda instância do GameDock pede para a janela aparecer
+    on_quit = None  # chamado quando o instalador pede para o GameDock fechar (atualização)
 
     def do_GET(self) -> None:
         if self.path.startswith(shell.SHOW_PATH):
@@ -1159,6 +1285,15 @@ class _LocalFiles(SimpleHTTPRequestHandler):
             self.end_headers()
             if _LocalFiles.on_show:
                 threading.Thread(target=_LocalFiles.on_show, daemon=True).start()
+            return
+        if self.path.startswith(shell.QUIT_PATH):
+            # o instalador pede para fechar com calma (salva tempo de jogo etc.). Exige o token do
+            # instance.json: sem ele, qualquer site aberto no navegador poderia fechar o GameDock.
+            ok = _LocalFiles.on_quit is not None and shell.valid_token(self.path)
+            self.send_response(204 if ok else 403)
+            self.end_headers()
+            if ok:
+                threading.Thread(target=_LocalFiles.on_quit, daemon=True).start()
             return
         if self.path.startswith("/clips/"):
             return self._serve_clip()
@@ -1320,6 +1455,7 @@ def run() -> None:
     if start_in_tray:
         api._shell.hidden = api._shell.unloaded = True
     _LocalFiles.on_show = api._shell.show
+    _LocalFiles.on_quit = api._shell.quit
     api._window.events.closing += api._shell.on_closing
     # as outras janelas ficam fora da tela; sem isto, fechar a principal deixaria o processo vivo
     api._window.events.closed += api._shell.on_closed
@@ -1327,6 +1463,7 @@ def run() -> None:
     def started():
         api._shell.tray.start()
         api._live.start()
+        ShortcutWatcher(api).start()
         config = load_config()
         if "--console" in sys.argv or config.get("start_fullscreen"):
             api._window.toggle_fullscreen()

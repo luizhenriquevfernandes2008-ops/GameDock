@@ -9,6 +9,7 @@ import time
 
 from . import discord_rpc
 from .discord_rpc import DiscordClient, DiscordError
+from .listen import ListenTogether
 from .storage import load_config
 from .ytmusic import MusicPlayer
 
@@ -28,6 +29,8 @@ class Integrations:
         self.game_running = lambda: False
         self.discord = DiscordClient(on_event=self._discord_event)
         self.music = MusicPlayer(on_change=self._music_change)
+        # ouvir junto na call: cada um toca no próprio YouTube Music, sincronizado (veja listen.py)
+        self.listen = ListenTogether(self.music, lambda: self.discord.user, lambda st: self._push("onListen", st))
         self._stop = threading.Event()
         self._last_try = 0.0
 
@@ -114,10 +117,13 @@ class Integrations:
             self._push("onDiscord", {"type": "speaking", "user": str(data.get("user_id")), "on": evt == "SPEAKING_START"})
         elif evt in ("VOICE_STATE_CREATE", "VOICE_STATE_UPDATE", "VOICE_STATE_DELETE", "CALL_CHANGED"):
             self._push("onDiscord", {"type": "call"})
+            if evt == "CALL_CHANGED":
+                self.listen.on_call(data.get("channel_id"))
         elif evt == "VOICE_SETTINGS_UPDATE":
             self._push("onDiscord", {"type": "voice", "mute": bool(data.get("mute")), "deaf": bool(data.get("deaf"))})
         elif evt == "DISCONNECTED":
             self._push("onDiscord", {"type": "status", **self.discord_state()})
+            self.listen.on_call(None)
         elif evt == "NOTIFICATION_CREATE":
             self._discord_notification(data)
             threading.Thread(target=self._learn_from_message, args=(data,), daemon=True).start()

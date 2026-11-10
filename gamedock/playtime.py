@@ -7,6 +7,7 @@ Para jogos da Steam, o tempo que a Steam já registrou entra como ponto de parti
 """
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
@@ -18,11 +19,18 @@ from .launcher import EMULATED
 from .models import now_iso
 from .processes import running_executables
 from .scanners.steam import SteamScanner
-from .storage import LIBRARY_LOCK, Library, append_session
+from .storage import LIBRARY_LOCK, Library, append_session, atomic_write, data_dir
 
 INTERVAL = 5          # segundos entre verificações
 END_AFTER_MISSES = 2  # sessão termina após ~10 s sem o processo (evita cortar em reinícios rápidos)
 SAVE_EVERY = 60
+# o GameDock fechou (atualização, Sair) com jogo aberto: a sessão fica guardada aqui e é retomada
+# na próxima abertura, sem contar uma "jogada" nova. Fechado por mais que isso, a sessão é encerrada.
+RESUME_MAX_GAP = 15 * 60
+
+
+def _active_file() -> Path:
+    return data_dir() / "active_sessions.json"
 # executáveis que ficam na pasta do jogo mas não são o jogo
 IGNORED_EXE = re.compile(r"crash|report|unins|setup|redist|easyanticheat|^eac|battleye|beservice|"
                          r"webhelper|cefsharp|updater|dxsetup|vcredist|prereq", re.I)
@@ -102,6 +110,8 @@ class PlaytimeMonitor(threading.Thread):
         self.misses: dict[str, int] = {}
         self.pending: dict[str, float] = {}  # segundos ainda não salvos
         self._halt = threading.Event()
+        self.resume: dict[str, float] = {}   # sessões abertas antes do GameDock fechar
+        self.resume_saved_at = 0.0
 
     def running_now(self) -> set[str]:
         return set(self.active)
@@ -110,10 +120,37 @@ class PlaytimeMonitor(threading.Thread):
         return self.active.get(game_id)
 
     def stop(self) -> None:
+        """Chamado quando o GameDock fecha: salva o tempo pendente e guarda as sessões abertas."""
         self._halt.set()
         self._flush()
+        try:
+            if self.active:
+                atomic_write(_active_file(), json.dumps({"saved_at": time.time(), "active": self.active}))
+            else:
+                _active_file().unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def _load_resume(self) -> None:
+        try:
+            data = json.loads(_active_file().read_text(encoding="utf-8"))
+            _active_file().unlink(missing_ok=True)
+        except (OSError, ValueError):
+            return
+        self.resume_saved_at = float(data.get("saved_at") or 0)
+        self.resume = {k: float(v) for k, v in (data.get("active") or {}).items()}
+        if time.time() - self.resume_saved_at > RESUME_MAX_GAP:
+            self._close_resumed()
+
+    def _close_resumed(self) -> None:
+        """Sessões guardadas cujo jogo não está mais aberto: terminam quando o GameDock fechou."""
+        for game_id, started in self.resume.items():
+            if self.resume_saved_at > started:
+                append_session(game_id, started, self.resume_saved_at)
+        self.resume.clear()
 
     def run(self) -> None:
+        self._load_resume()
         import_steam_playtime()
         last_tick = time.monotonic()
         last_save = last_tick
@@ -150,11 +187,18 @@ class PlaytimeMonitor(threading.Thread):
 
         for game_id in running:
             self.misses.pop(game_id, None)
-            if game_id not in self.active:
+            if game_id not in self.active and game_id in self.resume:
+                # mesma sessão de antes do GameDock fechar: o tempo fechado também foi jogado
+                self.active[game_id] = self.resume.pop(game_id)
+                self.pending[game_id] = self.pending.get(game_id, 0) + max(0.0, time.time() - self.resume_saved_at)
+            elif game_id not in self.active:
                 self.active[game_id] = time.time()
                 self._session_started(game_id)
             else:
                 self.pending[game_id] = self.pending.get(game_id, 0) + elapsed
+
+        if self.resume:
+            self._close_resumed()   # depois da 1ª verificação, o que não está rodando já acabou
 
         for game_id in list(self.active):
             if game_id in running:

@@ -49,7 +49,20 @@ MOD_LOADERS = {
 # para o launcher, o jogo mora em outra pasta). Cada um sabe ler onde está o jogo.
 RECOMP_LAUNCHERS = {"nx2navi.exe": "nx2navi"}
 # nomes bonitos para o .exe do jogo (senão usamos o nome do arquivo do dump)
-RECOMP_TITLES = {"ocarina.exe": "The Legend of Zelda: Ocarina of Time"}
+RECOMP_TITLES = {
+    "ocarina.exe": "The Legend of Zelda: Ocarina of Time",          # NX2navi
+    "soh.exe": "The Legend of Zelda: Ocarina of Time",               # Ship of Harkinian
+    "2ship.exe": "The Legend of Zelda: Majora's Mask",               # 2 Ship 2 Harkinian
+    "zelda64recompiled.exe": "The Legend of Zelda: Majora's Mask",   # Zelda64Recomp
+    "starship.exe": "Star Fox 64",                                   # Starship
+    "spaghettikart.exe": "Mario Kart 64",                            # SpaghettiKart
+}
+
+
+def port_title(exe: str | Path | None) -> str | None:
+    """Nome oficial do jogo para .exe de ports/recompilações conhecidos (o atalho costuma
+    se chamar "soh", "2ship"...). A capa também é buscada por esse nome."""
+    return RECOMP_TITLES.get(Path(exe).name.lower()) if exe else None
 
 # pastas do Menu Iniciar cujos atalhos são todos jogos
 GAME_FOLDERS = {
@@ -85,7 +98,17 @@ class ShortcutScanner(Scanner):
     # fontes que este scanner pode produzir (o merge usa para saber o que sumiu)
     sources = {"local", "riot", "battlenet", "ea", "google", *URI_SOURCES.values(), *GAME_FOLDERS.values()}
 
+    def __init__(self):
+        self.candidates: list[dict] = []   # atalhos de .exe que quase passaram como jogo
+        self.forced: set[str] = set()      # .exe que a pessoa marcou como jogo ("É jogo")
+        self.not_games: set[str] = set()   # .exe que a pessoa marcou como "Não é jogo"
+
     def scan(self):
+        from ..storage import load_config
+        config = load_config()
+        self.forced = {p.lower() for p in config.get("forced_games", [])}
+        self.not_games = {p.lower() for p in config.get("not_games", [])}
+        self.candidates = []
         games = []
         for directory in shortcut_dirs():
             if not directory.exists():
@@ -99,6 +122,7 @@ class ShortcutScanner(Scanner):
         # o mesmo jogo com e sem carregador de mods (Reloaded-II): a versão com mods ganha
         # a deduplicação por pasta, que fica com o primeiro que aparece
         games.sort(key=lambda g: Path(g.launch_target).name.lower() not in MOD_LOADERS)
+        save_candidates(self.candidates)
         yield from games
 
     def from_url(self, path: Path) -> Game | None:
@@ -149,16 +173,26 @@ class ShortcutScanner(Scanner):
             # .exe desconhecido: analisa o executável e a pasta para decidir se é jogo
             if "\\steamapps\\common\\" in game_exe.lower() or not Path(game_exe).is_file():
                 return None  # jogos da Steam já vêm do scanner da Steam
-            verdict = analyze(Path(game_exe), quick=True)
-            if not verdict.is_game:
+            key = str(Path(game_exe)).lower()
+            if key in self.not_games:
+                return None
+            verdict = analyze(Path(game_exe), quick=key not in self.forced)
+            if not verdict.is_game and key not in self.forced:
+                # perto do mínimo (e sem sinal forte de app): vira sugestão em "Talvez seja jogo"
+                if (verdict.score >= 0 and _candidate_ok(Path(game_exe))
+                        and not any(c["exe"].lower() == key for c in self.candidates)):
+                    self.candidates.append({"exe": str(Path(game_exe)), "shortcut": str(path),
+                                            "name": clean_name(path.stem), "score": verdict.score,
+                                            "reasons": verdict.reasons})
                 return None
             source, install_dir = "local", str(verdict.root)
         if source == "riot":
             install_dir = riot_install_dir(clean_name(path.stem))
+        name = (port_title(game_exe) if source == "local" else None) or clean_name(path.stem)
 
         return Game(
-            id=f"{source}:{slug(clean_name(path.stem))}",
-            name=clean_name(path.stem),
+            id=f"{source}:{slug(name)}",
+            name=name,
             source=source,
             launch_type="exe",
             launch_target=target,
@@ -236,6 +270,40 @@ def recomp_game(launcher: Path, kind: str) -> tuple[str, Path, Path] | None:
         name = RECOMP_TITLES.get(game_exe.name.lower()) or dump_name or game_dir.name
         return name, game_dir, game_exe
     return None
+
+
+_TOOL_NAMES = re.compile(r"unins|setup|install|python|node|git|wsl|cmd|powershell|config|report|crash|"
+                         r"helper|update|editor|server|daemon|service|cert", re.I)
+
+
+def _candidate_ok(exe: Path) -> bool:
+    """Só vira sugestão o que pode mesmo ser jogo: fora de Arquivos de Programas (lá quase tudo
+    é programa instalado), sem nome de ferramenta e sem cara de app Electron/Chromium/Squirrel."""
+    text = str(exe).lower()
+    if "\\program files" in text or "\\windows\\" in text or _TOOL_NAMES.search(exe.stem):
+        return False
+    folder = exe.parent
+    if (folder / "resources" / "app.asar").exists() or (folder / "Update.exe").exists() or (folder.parent / "Update.exe").exists():
+        return False
+    # Chromium/Electron ao lado do .exe ou numa subpasta de versão (ex: VS Code\2c33b50b16\)
+    try:
+        places = [folder, *(d for d in folder.iterdir() if d.is_dir())]
+    except OSError:
+        places = [folder]
+    return not any((d / "chrome_100_percent.pak").exists() or (d / "LICENSES.chromium.html").exists() for d in places)
+
+
+def candidates_file() -> Path:
+    from ..storage import data_dir
+    return data_dir() / "candidates.json"
+
+
+def save_candidates(candidates: list[dict]) -> None:
+    from ..storage import atomic_write
+    try:
+        atomic_write(candidates_file(), json.dumps(sorted(candidates, key=lambda c: -c["score"]), ensure_ascii=False))
+    except OSError:
+        pass
 
 
 def _flag_value(args: str, flag: str) -> str | None:

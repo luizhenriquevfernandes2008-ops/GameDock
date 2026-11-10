@@ -5,6 +5,9 @@
 # a cada abertura (~1,5 s a mais). Só o instalador é onefile, porque ele roda uma vez.
 Set-Location $PSScriptRoot
 if (-not (Test-Path assets\gamedock.ico)) { python assets\make_icon.py }
+# testes primeiro: versão com teste quebrado não chega a ser gerada
+python -m unittest discover -s tests
+if ($LASTEXITCODE -ne 0) { Write-Error "Testes falharam: build cancelado."; exit $LASTEXITCODE }
 python -m PyInstaller --onedir --windowed --name GameDock --icon assets\gamedock.ico `
     --add-data "gamedock\web;gamedock\web" --clean --noconfirm run_gamedock.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

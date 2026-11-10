@@ -816,7 +816,7 @@ function bindPages() {
   });
   $("gpTrophies").addEventListener("click", openTrophies);
   $("gpFolder").addEventListener("click", () => api().open_game_folder(state.pageGame));
-  $("gpCoverBtn").addEventListener("click", () => changeCover());
+  $("gpCoverBtn").addEventListener("click", () => (window.openCoverGallery ? openCoverGallery() : changeCover()));
   $("gpResetCover").addEventListener("click", () => changeCover(true));
   $("gpSave").addEventListener("click", saveGameOptions);
   $("gpHide").addEventListener("click", hideGame);

@@ -352,58 +352,96 @@ async function renderDisk(id, again = 0) {
   if ((d.size == null || t?.running) && again < 120) setTimeout(() => renderDisk(id, again + 1), t?.running ? 800 : 1500);
 }
 
-// desinstalar (tela inicial, botão da lixeira): 1º clique mostra o que vai acontecer,
-// 2º clique (em até 8 s, no mesmo jogo) confirma. Trocar de jogo desarma.
-let uninstallTimer = null;
-let uninstallArmedFor = null;
-function resetUninstallButton() {
-  const b = $("uninstallBtn");
-  clearTimeout(uninstallTimer);
-  uninstallArmedFor = null;
-  if (b.dataset.busy === "1") return;
-  b.dataset.armed = "";
-  b.querySelector("span").textContent = "Confirmar desinstalação";
+// desinstalar: SEGURAR para confirmar (estilo console). Mouse no botão da lixeira, tecla Delete
+// ou LT no controle. Enquanto segura, o anel enche e o aviso diz o que vai acontecer; soltar cancela.
+const HOLD_MS = 2000;
+const keysDown = new Set();
+window.addEventListener("keydown", (e) => keysDown.add(e.key));
+window.addEventListener("keyup", (e) => keysDown.delete(e.key));
+window.addEventListener("blur", () => keysDown.clear());
+const hold = { active: false, source: null, id: null, name: "", btn: null, start: 0, pointer: false, plan: null, raf: 0 };
+
+function stillHeld() {
+  if (hold.source === "pointer") return hold.pointer;
+  if (hold.source === "key") return keysDown.has("Delete");
+  if (hold.source === "pad") return pad.held.has("Delete");
+  return false;
 }
 
-const _showHeroUninstall = showHero;
-showHero = function (game) {
-  if (uninstallArmedFor && uninstallArmedFor !== game?.id) resetUninstallButton();
-  return _showHeroUninstall(game);
+function setHoldProgress(btn, p) {
+  btn.style.setProperty("--p", String(Math.round(p * 100)));
+  btn.classList.toggle("holding", p > 0);
+}
+
+function cancelHold() {
+  if (!hold.active) return;
+  cancelAnimationFrame(hold.raf);
+  if (hold.btn) setHoldProgress(hold.btn, 0);
+  hold.active = false;
+}
+
+// source: "pointer" | "key" | "pad"; sem id = jogo selecionado na tela inicial
+window.startUninstallHold = async function (source, id, name, btn) {
+  if (hold.active) return;
+  const game = id ? { id, name } : current();
+  btn = btn || $("uninstallBtn");
+  if (!game || btn.dataset.busy === "1") return;
+  Object.assign(hold, { active: true, source, id: game.id, name: game.name, btn, start: performance.now(), plan: null });
+  if (source === "pointer") hold.pointer = true;
+  const plan = await api().uninstall_plan(game.id);
+  if (!hold.active || hold.id !== game.id) return;
+  if (plan.mode === "none") { cancelHold(); toast(plan.text, true, 6000); Sfx.play("error"); return; }
+  hold.plan = plan;
+  toast(`${game.name}: ${plan.text} Segure para confirmar.`, false, 8000);
+  Sfx.play("move");
+  const tick = (now) => {
+    if (!hold.active) return;
+    if (!stillHeld()) { cancelHold(); return; }
+    const p = Math.min(1, (now - hold.start) / HOLD_MS);
+    setHoldProgress(btn, p);
+    if (p >= 1) { cancelHold(); runUninstall(game.id, game.name, btn); return; }
+    hold.raf = requestAnimationFrame(tick);
+  };
+  hold.raf = requestAnimationFrame(tick);
 };
 
-async function uninstallGame() {
-  const b = $("uninstallBtn");
-  const game = current();
-  if (!game || b.dataset.busy === "1") return;
-  const { id, name } = game;
-  if (b.dataset.armed !== "1" || uninstallArmedFor !== id) {
-    const plan = await api().uninstall_plan(id);
-    if (plan.mode === "none") { toast(plan.text, true, 6000); Sfx.play("error"); return; }
-    toast(`${name}: ${plan.text}`, false, 8000);
-    b.dataset.armed = "1";
-    uninstallArmedFor = id;
-    Sfx.play("move");
-    clearTimeout(uninstallTimer);
-    uninstallTimer = setTimeout(resetUninstallButton, 8000);
-    return;
-  }
-  clearTimeout(uninstallTimer);
-  b.dataset.armed = "";
-  b.dataset.busy = "1";
-  b.querySelector("span").textContent = "Desinstalando…";
+async function runUninstall(id, name, btn) {
+  btn.dataset.busy = "1";
+  const label = btn.querySelector("span");
+  if (label) label.textContent = "Desinstalando…";
   toast(`Desinstalando ${name}… os saves foram copiados antes.`, false, 6000);
   let r;
   try {
     r = await api().uninstall_game(id);
+  } catch (err) {
+    r = { ok: false, error: String(err) };
   } finally {
-    b.dataset.busy = "";
-    resetUninstallButton();
+    btn.dataset.busy = "";
   }
   if (!r.ok) { toast(r.error, true, 6000); Sfx.play("error"); return; }
   if (!r.removed) { toast(`${name} continua instalado (o desinstalador foi cancelado ou ainda não terminou).`, false, 6000); return; }
   Sfx.play("success");
   toast(`${name} foi desinstalado.`);
   await loadGames();
+  if (state.settingsOpen) renderStorage();
+}
+
+function bindUninstallHold(btn, getGame) {
+  const down = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const g = getGame();
+    startUninstallHold("pointer", g?.id, g?.name, btn);
+  };
+  const up = () => { hold.pointer = false; };
+  btn.addEventListener("pointerdown", down);
+  btn.addEventListener("pointerup", up);
+  btn.addEventListener("pointerleave", up);
+  btn.addEventListener("pointercancel", up);
+  // A do controle / Enter "clicam": explicam como confirmar em vez de desinstalar na hora
+  btn.addEventListener("click", (e) => {
+    if (e.detail === 0) toast(state.gamepad ? "Segure LT para desinstalar" : "Segure o botão (ou Delete) para desinstalar", false, 4000);
+  });
 }
 
 async function moveGame() {
@@ -833,7 +871,7 @@ function bindFeatures() {
   $("randomPlay").addEventListener("click", playRandom);
   $("freeBtn").addEventListener("click", openFreeGames);
   $("gpMove").addEventListener("click", moveGame);
-  $("uninstallBtn").addEventListener("click", uninstallGame);
+  bindUninstallHold($("uninstallBtn"), () => null);
   $("gpSavesFolder").addEventListener("click", () => api().open_saves_folder(state.pageGame));
   $("savesOpen").addEventListener("click", () => api().open_saves_folder(null));
   $("igdbSave").addEventListener("click", saveIgdb);

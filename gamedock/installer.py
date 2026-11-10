@@ -97,6 +97,9 @@ def install(payload: Path, desktop_shortcut: bool, autostart: bool | None, log=p
 def silent_update(payload: Path) -> None:
     """GameDock-Setup.exe --silent (atualização automática): espera o GameDock fechar, instala e abre de novo."""
     import time
+    from .shell import request_quit
+    if _running_gamedocks():
+        request_quit()   # fecha com calma (o auto-update já fecha sozinho; isto cobre instalação manual)
     deadline = time.time() + 60
     while _running_gamedocks() and time.time() < deadline:
         time.sleep(0.5)
@@ -265,7 +268,9 @@ def setup_main() -> None:
                               "(Seus troféus, capturas e perfil não são apagados.)", MB_YESNO | MB_ICONQUESTION)
             if answer != IDYES:
                 return
-            for pid in running:
+            from .shell import request_quit
+            request_quit()   # primeiro pede para fechar normalmente; só força se não fechar
+            for pid in _running_gamedocks():
                 subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=CREATE_NO_WINDOW)
         choice = {"desktop": desktop.get(), "autostart": autostart.get(),
                   "emus": [emu_id for emu_id, var in emus.items() if var.get()],

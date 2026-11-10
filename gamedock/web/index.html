@@ -100,7 +100,7 @@
         </button>
         <button class="round-btn uninstall-btn" id="uninstallBtn" title="Desinstalar">
           <svg viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>Confirmar desinstalação</span>
+          <span>Desinstalando…</span>
         </button>
       </div>
     </section>
@@ -158,6 +158,27 @@
           <button type="submit" class="play-btn small" id="sgdbSave"><span>Salvar</span></button>
         </div>
         <p class="settings-status" id="sgdbStatus"></p>
+      </section>
+      <section class="settings-sound">
+        <h3>Biblioteca</h3>
+        <p>Pastas onde o GameDock procura jogos sem launcher (cada subpasta vira um jogo, mesmo sem atalho).
+           Atalhos novos na Área de Trabalho e no Menu Iniciar aparecem sozinhos.</p>
+        <div class="emu-folders" id="libFolders"></div>
+        <div class="settings-actions" style="margin-top:0">
+          <span class="settings-hint" id="libStatus"></span>
+          <button type="button" class="ghost-btn" id="libAddFolder">Adicionar pasta…</button>
+        </div>
+        <div id="libSuggestions"></div>
+        <div id="libCandidates"></div>
+        <div class="settings-actions" id="libPurgeRow" hidden>
+          <span class="settings-hint" id="libPurgeText"></span>
+          <button type="button" class="ghost-btn" id="libPurge">Limpar</button>
+        </div>
+      </section>
+      <section class="settings-sound">
+        <h3>Armazenamento</h3>
+        <div class="storage-drives" id="stDrives"></div>
+        <div class="storage-list" id="stGames"><p class="settings-hint">Abra para calcular…</p></div>
       </section>
       <section class="settings-sound">
         <h3>Troféus</h3>
@@ -642,6 +663,15 @@
         </div>
         <label class="mu-vol" title="Volume"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/></svg><input type="range" id="muVol" min="0" max="100" value="100"></label>
       </div>
+      <div class="block listen-block" id="listenBlock" hidden>
+        <h3>Ouvir junto na call <small class="saved-note" id="listenNote"></small></h3>
+        <p class="settings-hint" id="listenHint">Cada um toca no próprio YouTube Music, sincronizado com quem transmite.</p>
+        <div class="listen-hosts" id="listenHosts"></div>
+        <div class="settings-actions" style="margin-top:8px">
+          <span class="settings-hint" id="listenListeners"></span>
+          <button type="button" class="ghost-btn" id="listenHostBtn">Transmitir minha música</button>
+        </div>
+      </div>
       <div class="mu-actions">
         <button class="ghost-btn tall" id="muWindow">Abrir janela do YouTube Music</button>
         <button class="ghost-btn tall" id="muReload">Atualizar playlists</button>
@@ -674,6 +704,16 @@
   </section>
 
   <!-- sorteio -->
+  <div class="random-overlay cover-gallery" id="coverGallery">
+    <small>Trocar capa</small>
+    <strong id="cgTitle"></strong>
+    <div class="cg-grid" id="cgGrid"></div>
+    <div class="random-actions">
+      <button class="ghost-btn tall" id="cgFile">Escolher arquivo do PC…</button>
+      <button class="ghost-btn tall" id="cgClose">Fechar</button>
+    </div>
+  </div>
+
   <div class="random-overlay" id="randomOverlay">
     <small>O GameDock escolheu</small>
     <div class="random-reel" id="randomReel"></div>
@@ -847,6 +887,7 @@
   <script src="recap.js"></script>
   <script src="emulators.js"></script>
   <script src="features.js"></script>
+  <script src="library.js"></script>
   <script src="social.js"></script>
   <script src="padnav.js"></script>
 </body>

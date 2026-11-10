@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ..models import Game
 from .base import Scanner, slug
-from .shortcuts import LAUNCHER_EXES
+from .shortcuts import LAUNCHER_EXES, port_title
 
 BAD_EXE = re.compile(
     r"unins|setup|install|redist|vc_?redist|dxsetup|directx|dotnet|crash|report|bugsplat|"
@@ -85,7 +85,7 @@ class FolderScanner(Scanner):
                     continue
                 yield Game(
                     id=f"folder:{slug(str(game_dir))}",
-                    name=game_dir.name,
+                    name=port_title(exe) or game_dir.name,
                     source=self.name,
                     launch_type="exe",
                     launch_target=str(exe),

@@ -38,6 +38,11 @@ GAME_FILES = {
     "openal32.dll": (2, "OpenAL"), "sdl2.dll": (2, "SDL2"), "sdl3.dll": (2, "SDL3"),
     "rgss3a.dll": (6, "RPG Maker"), "rgss301.dll": (6, "RPG Maker"),
     "gameinfo.txt": (5, "Source Engine"),
+    # ports de N64 da Harbour Masters / recompilações: o jogo vem num arquivo .otr/.o2r ao lado do .exe
+    "oot.otr": (6, "port (Ship of Harkinian)"), "soh.otr": (6, "port (Ship of Harkinian)"),
+    "mm.o2r": (6, "port (2 Ship 2 Harkinian)"), "2ship.o2r": (6, "port (2 Ship 2 Harkinian)"),
+    "sf64.o2r": (6, "port (Starship)"), "starship.o2r": (6, "port (Starship)"),
+    "mk64.o2r": (6, "port (SpaghettiKart)"), "spaghetti.o2r": (6, "port (SpaghettiKart)"),
 }
 GAME_DIRS = {"engine": (3, "Unreal Engine"), "renpy": (6, "Ren'Py"), "www": (1, "RPG Maker MV/MZ")}
 
