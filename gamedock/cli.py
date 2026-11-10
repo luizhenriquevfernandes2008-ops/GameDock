@@ -9,7 +9,7 @@ from . import __version__, sgdb
 from .detect import THRESHOLD, analyze
 from .launcher import LaunchError, launch
 from .models import Game
-from .scanners import build_scanners, run_scanners
+from .scanners import build_scanners, run_scanners, scanned_sources
 from .scanners.base import slug
 from .storage import Library, data_dir, load_config, save_config
 
@@ -33,7 +33,7 @@ def cmd_scan(args) -> None:
     library = Library()
     scanners = build_scanners(config)
     games, errors = run_scanners(scanners)
-    sources = {s.name for s in scanners} | {g.source for g in games}
+    sources = scanned_sources(scanners, errors) | {g.source for g in games}
     report = library.merge_scan(games, sources)
     library.save()
 

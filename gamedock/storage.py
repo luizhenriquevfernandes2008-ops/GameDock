@@ -113,6 +113,17 @@ def save_config(config: dict) -> None:
 LIBRARY_LOCK = threading.RLock()
 
 
+def _launch_file_gone(game: Game) -> bool | None:
+    """True se o .exe/ISO do jogo não existe mais; None quando não dá pra saber (URI, nome solto)."""
+    target = game.launch_target or ""
+    if game.launch_type not in ("exe", "emu") or not (target[1:3] == ":\\" or target.startswith("\\\\")):
+        return None
+    try:
+        return not Path(target).exists()
+    except OSError:
+        return None
+
+
 class Library:
     def __init__(self, path: Path | None = None):
         self.path = path or data_dir() / "library.json"
@@ -156,7 +167,18 @@ class Library:
         # jogo que estava na biblioteca e sumiu do scan: provavelmente foi desinstalado.
         # Não apagamos (mantém favoritos/estatísticas caso volte), só marcamos.
         for game in self.games.values():
-            if game.manual or game.id in seen or game.source not in scanned_sources:
+            if game.id in seen:
+                continue
+            gone = _launch_file_gone(game)
+            if game.manual:
+                # adicionado à mão: nenhum scanner o encontra, então vale o arquivo existir ou não
+                if gone is not None and game.installed == gone:
+                    game.installed = not gone
+                    report["missing" if gone else "updated"].append(game)
+                continue
+            # o .exe/ISO sumiu do disco: desinstalado, mesmo que a fonte não tenha sido varrida
+            # (ex: ISO de PS3 apagado com o emulador fechado ou sem nenhum outro jogo de PS3)
+            if game.source not in scanned_sources and not gone:
                 continue
             # jogo local achado por atalho: apagar o atalho não desinstala o jogo
             # (a menos que outro jogo do scan já aponte para o mesmo exe — aí este é uma duplicata velha)

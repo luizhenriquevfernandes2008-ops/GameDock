@@ -16,6 +16,11 @@ class EmulatorScanner(Scanner):
     """Jogos dos emuladores integrados (PS3...), nas pastas que o usuário adicionou."""
     name = "emulators"
 
+    def covered_sources(self) -> set[str]:
+        # emulador desinstalado não lista nada; isso não quer dizer que os ISOs sumiram
+        from ..emulators import EMULATORS
+        return {e.id for e in EMULATORS.values() if e.installed()}
+
     def scan(self):
         from ..emulators import EMULATORS
         for emulator in EMULATORS.values():
@@ -36,6 +41,19 @@ def build_scanners(config: dict) -> list[Scanner]:
     ]
     disabled = set(config.get("disabled_scanners", []))
     return [s for s in scanners if s.name not in disabled]
+
+
+def scanned_sources(scanners: list[Scanner], errors: dict[str, str]) -> set[str]:
+    """Fontes que o scan cobriu de verdade. Scanner que falhou fica de fora: um erro na
+    leitura da Steam não pode marcar todos os jogos da Steam como desinstalados."""
+    covered: set[str] = set()
+    for scanner in scanners:
+        if scanner.name not in errors:
+            try:
+                covered |= scanner.covered_sources()
+            except Exception:
+                pass
+    return covered
 
 
 def run_scanners(scanners: list[Scanner]) -> tuple[list[Game], dict[str, str]]:

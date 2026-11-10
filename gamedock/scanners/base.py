@@ -11,6 +11,12 @@ class Scanner:
     """Cada launcher (Steam, Epic...) é uma subclasse que sabe onde procurar os jogos."""
 
     name: str = ""
+    # Fontes (Game.source) que este scanner cobre por inteiro. Depois de um scan sem erro,
+    # um jogo dessas fontes que não apareceu é tratado como desinstalado. Padrão: o próprio nome.
+    sources: set[str] | None = None
+
+    def covered_sources(self) -> set[str]:
+        return set(self.sources) if self.sources else {self.name}
 
     def scan(self) -> Iterator[Game]:
         raise NotImplementedError

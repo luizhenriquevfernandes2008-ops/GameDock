@@ -38,6 +38,13 @@ LAUNCHER_EXES = {
     "eadesktop.exe": ("ea", "-gameId"),
 }
 
+# carregadores de mod que abrem o jogo por argumento (ex: "SILENT HILL 3 (Reloaded).lnk"
+# -> Reloaded-II.exe --launch "...\sh3.exe"). Analisamos o jogo, mas iniciamos pelo
+# carregador, senão o jogo abriria sem os mods.
+MOD_LOADERS = {
+    "reloaded-ii.exe": "--launch",
+}
+
 # pastas do Menu Iniciar cujos atalhos são todos jogos
 GAME_FOLDERS = {
     "google play games": "google",
@@ -69,7 +76,11 @@ def shortcut_dirs() -> list[Path]:
 class ShortcutScanner(Scanner):
     name = "shortcuts"
 
+    # fontes que este scanner pode produzir (o merge usa para saber o que sumiu)
+    sources = {"local", "riot", "battlenet", "ea", "google", *URI_SOURCES.values(), *GAME_FOLDERS.values()}
+
     def scan(self):
+        games = []
         for directory in shortcut_dirs():
             if not directory.exists():
                 continue
@@ -78,7 +89,11 @@ class ShortcutScanner(Scanner):
                     continue
                 game = self.from_url(path) if path.suffix.lower() == ".url" else self.from_lnk(path)
                 if game:
-                    yield game
+                    games.append(game)
+        # o mesmo jogo com e sem carregador de mods (Reloaded-II): a versão com mods ganha
+        # a deduplicação por pasta, que fica com o primeiro que aparece
+        games.sort(key=lambda g: Path(g.launch_target).name.lower() not in MOD_LOADERS)
+        yield from games
 
     def from_url(self, path: Path) -> Game | None:
         url = read_url_shortcut(path)
@@ -109,7 +124,12 @@ class ShortcutScanner(Scanner):
         if not target.lower().endswith(".exe"):
             return None
         source, install_dir = None, None
+        game_exe = target
         exe_name = Path(target).name.lower()
+        if exe_name in MOD_LOADERS:
+            game_exe = _flag_value(args, MOD_LOADERS[exe_name])
+            if not game_exe or not game_exe.lower().endswith(".exe"):
+                return None  # atalho que só abre o carregador de mods
         if exe_name in LAUNCHER_EXES:
             launcher_source, game_flag = LAUNCHER_EXES[exe_name]
             if game_flag.lower() not in args.lower():
@@ -119,9 +139,9 @@ class ShortcutScanner(Scanner):
             source = self.folder_source(path)
         if source is None:
             # .exe desconhecido: analisa o executável e a pasta para decidir se é jogo
-            if "\\steamapps\\common\\" in target.lower() or not Path(target).is_file():
+            if "\\steamapps\\common\\" in game_exe.lower() or not Path(game_exe).is_file():
                 return None  # jogos da Steam já vêm do scanner da Steam
-            verdict = analyze(Path(target), quick=True)
+            verdict = analyze(Path(game_exe), quick=True)
             if not verdict.is_game:
                 return None
             source, install_dir = "local", str(verdict.root)
@@ -137,7 +157,7 @@ class ShortcutScanner(Scanner):
             launch_args=_split_args(args),
             working_dir=info.get("working_dir") or str(Path(target).parent),
             install_dir=install_dir,
-            exe=target,
+            exe=game_exe,
             icon=info.get("icon_location") or None,
         )
 
@@ -165,5 +185,37 @@ def riot_install_dir(game_name: str) -> str | None:
     return None
 
 
+def _flag_value(args: str, flag: str) -> str | None:
+    """'--launch "C:\\x\\sh3.exe" --foo' -> 'C:\\x\\sh3.exe'"""
+    parts = _split_args(args)
+    for i, part in enumerate(parts[:-1]):
+        if part.lower() == flag.lower():
+            return parts[i + 1].strip('"')
+    return None
+
+
 def _split_args(args: str) -> list[str]:
-    return shlex.split(args, posix=False) if args.strip() else []
+    """Separa os argumentos com as regras do próprio Windows (CommandLineToArgvW).
+
+    O shlex (posix=False) deixava as aspas no argumento: '"C:\\a b\\x.exe"'. O launcher
+    remonta a linha com list2cmdline, que escapava essas aspas e o jogo recebia lixo.
+    """
+    if not args.strip():
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+        shell32, kernel32 = ctypes.windll.shell32, ctypes.windll.kernel32
+        shell32.CommandLineToArgvW.restype = ctypes.POINTER(wintypes.LPWSTR)
+        shell32.CommandLineToArgvW.argtypes = (wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int))
+        count = ctypes.c_int()
+        # o 1º item segue regras especiais (é o nome do programa): um nome falso fica nele
+        argv = shell32.CommandLineToArgvW(f"x {args}", ctypes.byref(count))
+        if argv:
+            try:
+                return [argv[i] for i in range(1, count.value)]
+            finally:
+                kernel32.LocalFree(argv)
+    except (OSError, AttributeError):
+        pass
+    return [a.strip('"') for a in shlex.split(args, posix=False)]

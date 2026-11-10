@@ -25,7 +25,7 @@ from .art import as_url, clear_memory, custom_cover, get_art, set_custom_cover, 
 from .launcher import LaunchError, clean_dll_search, launch
 from .live import LiveService, trophies_for_ui
 from .models import STATUSES, now_iso
-from .scanners import build_scanners, run_scanners
+from .scanners import build_scanners, run_scanners, scanned_sources
 from .storage import LIBRARY_LOCK, Library, data_dir, load_config, read_sessions, save_config
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -823,7 +823,7 @@ class Api:
             games, errors = run_scanners(scanners)   # a parte lenta fica fora da trava
             with LIBRARY_LOCK:
                 library = Library()
-                report = library.merge_scan(games, {s.name for s in scanners} | {g.source for g in games})
+                report = library.merge_scan(games, scanned_sources(scanners, errors) | {g.source for g in games})
                 library.save()
         return {
             "total": len(games),

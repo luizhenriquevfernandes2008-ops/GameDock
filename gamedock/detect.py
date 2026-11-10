@@ -43,7 +43,7 @@ GAME_DIRS = {"engine": (3, "Unreal Engine"), "renpy": (6, "Ren'Py"), "www": (1, 
 
 # importações do PE -> (pontos, motivo). Cada grupo conta uma vez só.
 IMPORT_GROUPS = (
-    (re.compile(r"^(d3d9|d3d10|d3d11|d3d12|dxgi|ddraw|opengl32|vulkan-1)\.dll$"), 2, "gráficos 3D"),
+    (re.compile(r"^(d3d8|d3d9|d3d10|d3d11|d3d12|dxgi|ddraw|opengl32|vulkan-1|glide[23]x)\.dll$"), 2, "gráficos 3D"),
     (re.compile(r"^(xinput[\d_]*|dinput8?|xinput9_1_0)\.dll$"), 2, "entrada de controle"),
     (re.compile(r"^(xaudio2_\d|x3daudio1_\d|dsound)\.dll$"), 1, "áudio de jogo"),
     (re.compile(r"^(steam_api(64)?|eossdk.*|galaxy(64)?)\.dll$"), 3, "SDK de loja"),
